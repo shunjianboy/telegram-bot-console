@@ -23,7 +23,6 @@
   </div>
   <div id="mainBox" style="display:none;">
     <h1>Telegram Bot 多Bot管理后台</h1>
-
     <div class="section">
       <h2>Bot配置</h2>
       <form id="botForm">
@@ -35,21 +34,28 @@
       <button onclick="loadBots()">刷新Bot列表</button>
       <div id="botsDiv"></div>
     </div>
-
     <div class="section">
       <h2>客户ID列表</h2>
       <select id="botSelect" onchange="loadCustomers()"></select>
       <button onclick="loadCustomers()">刷新客户ID</button>
       <div id="customersDiv"></div>
     </div>
-
     <div class="section">
       <h2>发送消息</h2>
       <form id="sendForm">
         <label>选择Bot: <select id="sendBotSelect"></select></label><br>
         <label>管理员ID: <input type="text" id="sendAdminId" required></label><br>
         <label>客户ID(可多选,用逗号分隔): <input type="text" id="sendCustomerIds" required></label><br>
-        <label>内容: <textarea id="sendMsg" required></textarea></label><br>
+        <label>内容: <textarea id="sendMsg"></textarea></label><br>
+        <label>上传文件:
+          <input type="file" id="sendFile">
+          <select id="fileType">
+            <option value="">请选择类型</option>
+            <option value="photo">图片</option>
+            <option value="video">视频</option>
+            <option value="document">普通文件</option>
+          </select>
+        </label><br>
         <button type="submit">发送</button>
       </form>
     </div>
@@ -62,7 +68,6 @@
     const workerApiBase = "https://telegram-bot-api.shunjianboy-e0e.workers.dev/api";
     let api_pass = localStorage.getItem('adminApiPass') || "";
 
-    // 登录
     function showMain() {
       document.getElementById('loginBox').style.display = 'none';
       document.getElementById('mainBox').style.display = '';
@@ -89,14 +94,12 @@
         showModal('密码错误');
       }
     }
-    // 弹窗
     function showModal(msg) {
       document.getElementById('modalContent').innerText = msg;
       document.getElementById('modal').style.display = 'flex';
     }
     document.getElementById('modal').onclick = function(){this.style.display='none'};
 
-    // Bot配置
     async function loadBots() {
       const res = await fetch(workerApiBase + "/bots");
       const bots = await res.json();
@@ -106,7 +109,6 @@
       }
       html += '</ul>';
       document.getElementById('botsDiv').innerHTML = html;
-      // select下拉赋值
       let options = '';
       for(const k in bots) options += `<option value="${k}">${k}</option>`;
       document.getElementById('botSelect').innerHTML = options;
@@ -131,7 +133,6 @@
       }
     };
 
-    // 客户ID
     async function loadCustomers() {
       const bot_name = document.getElementById('botSelect').value;
       const res = await fetch(workerApiBase + `/customers/${bot_name}`);
@@ -144,17 +145,53 @@
       document.getElementById('customersDiv').innerHTML = html;
     }
 
-    // 发消息
+    // 上传文件到 Telegram 服务器（返回 fileId 或 URL）
+    async function uploadToTelegram(botToken, file, type) {
+      const form = new FormData();
+      if(type === "photo") form.append("photo", file);
+      else if(type === "video") form.append("video", file);
+      else form.append("document", file);
+      const api = type === "photo" ? "sendPhoto" : type === "video" ? "sendVideo" : "sendDocument";
+      // 用自己的 admin_id 做 chat_id，只是为了上传
+      const chat_id = document.getElementById('sendAdminId').value.trim();
+      form.append("chat_id", chat_id);
+      // 返回 fileId
+      const res = await fetch(`https://api.telegram.org/bot${botToken}/${api}`, {method:"POST", body: form});
+      const data = await res.json();
+      if(data && data.result) {
+        if(type === "photo") return data.result.photo[data.result.photo.length-1].file_id;
+        if(type === "video") return data.result.video.file_id;
+        if(type === "document") return data.result.document.file_id;
+      }
+      return "";
+    }
+
     document.getElementById('sendForm').onsubmit = async (e)=>{
       e.preventDefault();
       const bot_name = document.getElementById('sendBotSelect').value;
       const admin_id = document.getElementById('sendAdminId').value.trim();
       const customer_ids = document.getElementById('sendCustomerIds').value.split(",").map(v=>v.trim()).filter(Boolean);
       const text = document.getElementById('sendMsg').value;
+      const fileInput = document.getElementById('sendFile');
+      const fileType = document.getElementById('fileType').value;
+      let fileUrl = "";
+      // 获取bot token
+      const botsRes = await fetch(workerApiBase + "/bots");
+      const bots = await botsRes.json();
+      const botToken = bots[bot_name].token;
+
+      if(fileInput.files.length && fileType){
+        fileUrl = await uploadToTelegram(botToken, fileInput.files[0], fileType);
+        if(!fileUrl) {
+          showModal('文件上传失败');
+          return;
+        }
+      }
+
       const res = await fetch(workerApiBase + "/send", {
         method:"POST",
         headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({api_pass,bot_name,admin_id,customer_ids,text})
+        body:JSON.stringify({api_pass,bot_name,admin_id,customer_ids,text,fileType,fileUrl})
       });
       const d = await res.json();
       if(d.ok) showModal('消息已发送!');
