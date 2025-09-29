@@ -80,6 +80,23 @@
         <button type="submit">群发</button>
       </form>
     </div>
+    <div class="section">
+      <h2>关键词自动回复</h2>
+      <label>选择Bot:
+        <select id="kwBotSelect"></select>
+      </label>
+      <button onclick="loadKeywords()">刷新</button>
+      <form id="kwForm">
+        <select id="kwType">
+          <option value="equal">精准匹配</option>
+          <option value="contain">模糊匹配</option>
+        </select>
+        <input type="text" id="kwKey" placeholder="关键词">
+        <input type="text" id="kwReply" placeholder="回复内容">
+        <button type="submit">添加关键词</button>
+      </form>
+      <div id="kwList"></div>
+    </div>
   </div>
   <div id="modal">
     <div class="content" id="modalContent"></div>
@@ -138,6 +155,7 @@
       document.getElementById('botSelect').innerHTML = options;
       document.getElementById('sendBotSelect').innerHTML = options;
       document.getElementById('broadcastBotSelect').innerHTML = options;
+      document.getElementById('kwBotSelect').innerHTML = options;
     }
     async function deleteBot(bot_name) {
       if(!confirm('确定要删除Bot：'+bot_name+'？')) return;
@@ -267,6 +285,50 @@
       if(d.ok) showModal('群发成功！本次发送：'+d.count+'人');
       else showModal('群发失败:'+(d.error||JSON.stringify(d)));
     };
+
+    // 关键词自动回复
+    async function loadKeywords() {
+      const bot_name = document.getElementById('kwBotSelect').value;
+      const res = await fetch(workerApiBase + `/keywords?bot_name=${encodeURIComponent(bot_name)}`);
+      const keywords = await res.json();
+      let html = '<ul>';
+      for(const [i, kw] of keywords.entries()) {
+        html += `<li>[${kw.type==='equal'?'精准':'模糊'}] <b>${kw.keyword}</b> → ${kw.reply}
+          <button onclick="deleteKeyword(${i})">删除</button></li>`;
+      }
+      html += '</ul>';
+      document.getElementById('kwList').innerHTML = html;
+    }
+    document.getElementById('kwForm').onsubmit = async (e)=>{
+      e.preventDefault();
+      const bot_name = document.getElementById('kwBotSelect').value;
+      const type = document.getElementById('kwType').value;
+      const keyword = document.getElementById('kwKey').value.trim();
+      const reply = document.getElementById('kwReply').value.trim();
+      if(!keyword||!reply) return showModal('关键词和回复内容必填');
+      const res = await fetch(workerApiBase + "/keywords", {
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({api_pass,bot_name,type,keyword,reply})
+      });
+      const d = await res.json();
+      if(d.ok) {
+        showModal('添加成功');
+        loadKeywords();
+      } else {
+        showModal('添加失败:'+d.error);
+      }
+    };
+    async function deleteKeyword(idx) {
+      const bot_name = document.getElementById('kwBotSelect').value;
+      if(!confirm('确定删除该关键词？')) return;
+      await fetch(workerApiBase + "/keywords", {
+        method:"DELETE",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({api_pass,bot_name,idx})
+      });
+      loadKeywords();
+    }
 
     window.onload = function(){
       if(api_pass) showMain();
