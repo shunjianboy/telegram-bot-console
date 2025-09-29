@@ -13,6 +13,9 @@
     #modal .content { background:#fff; padding:2em 3em; border-radius: 8px; }
     .chat-id-mask { font-family:monospace; font-size:0.95em; color:#555; }
     .section { margin-bottom:2em; border-bottom:1px solid #eee; }
+    .bot-list { margin: 0.5em 0; }
+    .bot-list-item { margin-bottom: 0.3em; }
+    .delete-btn { color: #fff; background: #e74c3c; border: none; padding: 0.2em 0.7em; border-radius: 3px; margin-left: 1em; cursor:pointer;}
   </style>
 </head>
 <body>
@@ -26,13 +29,13 @@
     <div class="section">
       <h2>Bot配置</h2>
       <form id="botForm">
-        <label>Bot名称: <input type="text" id="bot_name" required></label><br>
+        <label>Bot名称(用户名): <input type="text" id="bot_name" required placeholder="如 mytest_bot"></label><br>
         <label>Bot Token: <input type="text" id="bot_token" required></label><br>
         <label>管理员ID(多个用英文逗号分隔): <input type="text" id="admin_ids" required></label><br>
         <button type="submit">添加/更新Bot</button>
       </form>
       <button onclick="loadBots()">刷新Bot列表</button>
-      <div id="botsDiv"></div>
+      <div id="botsDiv" class="bot-list"></div>
     </div>
     <div class="section">
       <h2>客户ID列表</h2>
@@ -100,12 +103,15 @@
     }
     document.getElementById('modal').onclick = function(){this.style.display='none'};
 
+    let botsCache = {};
     async function loadBots() {
       const res = await fetch(workerApiBase + "/bots");
       const bots = await res.json();
+      botsCache = bots;
       let html = '<ul>';
       for(const k in bots){
-        html += `<li><b>${k}</b> Token: ${bots[k].token.slice(0,8)}... 管理员: ${bots[k].admins.join(",")}</li>`;
+        html += `<li class="bot-list-item"><b>${k}</b> Token: ${bots[k].token.slice(0,8)}... 管理员: ${bots[k].admins.join(",")}
+         <button class="delete-btn" onclick="deleteBot('${k}')">删除</button></li>`;
       }
       html += '</ul>';
       document.getElementById('botsDiv').innerHTML = html;
@@ -113,6 +119,21 @@
       for(const k in bots) options += `<option value="${k}">${k}</option>`;
       document.getElementById('botSelect').innerHTML = options;
       document.getElementById('sendBotSelect').innerHTML = options;
+    }
+    async function deleteBot(bot_name) {
+      if(!confirm('确定要删除Bot：'+bot_name+'？')) return;
+      const res = await fetch(workerApiBase + "/bots", {
+        method:"DELETE",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({api_pass,bot_name})
+      });
+      const d = await res.json();
+      if(d.ok) {
+        showModal('Bot已删除!');
+        loadBots();
+      } else {
+        showModal('删除失败:'+d.error);
+      }
     }
     document.getElementById('botForm').onsubmit = async (e)=>{
       e.preventDefault();
@@ -135,7 +156,7 @@
 
     async function loadCustomers() {
       const bot_name = document.getElementById('botSelect').value;
-      const res = await fetch(workerApiBase + `/customers/${bot_name}`);
+      const res = await fetch(workerApiBase + `/customers/${encodeURIComponent(bot_name)}`);
       const list = await res.json();
       let html = '<ul>';
       for(const id of list){
@@ -145,7 +166,7 @@
       document.getElementById('customersDiv').innerHTML = html;
     }
 
-    // 上传文件到 Telegram 服务器（返回 fileId 或 URL）
+    // 上传文件到 Telegram 服务器（返回 fileId）
     async function uploadToTelegram(botToken, file, type) {
       const form = new FormData();
       if(type === "photo") form.append("photo", file);
