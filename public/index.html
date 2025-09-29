@@ -44,7 +44,7 @@
       <div id="customersDiv"></div>
     </div>
     <div class="section">
-      <h2>发送消息</h2>
+      <h2>发送消息（单发）</h2>
       <form id="sendForm">
         <label>选择Bot: <select id="sendBotSelect"></select></label><br>
         <label>管理员ID: <input type="text" id="sendAdminId" required></label><br>
@@ -62,11 +62,30 @@
         <button type="submit">发送</button>
       </form>
     </div>
+    <div class="section">
+      <h2>群发通知</h2>
+      <form id="broadcastForm">
+        <label>选择Bot: <select id="broadcastBotSelect"></select></label><br>
+        <label>管理员ID: <input type="text" id="broadcastAdminId" required></label><br>
+        <label>内容: <textarea id="broadcastMsg"></textarea></label><br>
+        <label>上传文件:
+          <input type="file" id="broadcastFile">
+          <select id="broadcastFileType">
+            <option value="">请选择类型</option>
+            <option value="photo">图片</option>
+            <option value="video">视频</option>
+            <option value="document">普通文件</option>
+          </select>
+        </label><br>
+        <button type="submit">群发</button>
+      </form>
+    </div>
   </div>
   <div id="modal">
     <div class="content" id="modalContent"></div>
   </div>
   <script>
+    // 配置
     const workerApiBase = "https://telegram-bot-api.shunjianboy-e0e.workers.dev/api";
     let api_pass = localStorage.getItem('adminApiPass') || "";
 
@@ -118,6 +137,7 @@
       for(const k in bots) options += `<option value="${k}">${k}</option>`;
       document.getElementById('botSelect').innerHTML = options;
       document.getElementById('sendBotSelect').innerHTML = options;
+      document.getElementById('broadcastBotSelect').innerHTML = options;
     }
     async function deleteBot(bot_name) {
       if(!confirm('确定要删除Bot：'+bot_name+'？')) return;
@@ -165,13 +185,16 @@
       document.getElementById('customersDiv').innerHTML = html;
     }
 
+    // 上传文件到 Telegram 服务器（返回 fileId）
     async function uploadToTelegram(botToken, file, type) {
       const form = new FormData();
       if(type === "photo") form.append("photo", file);
       else if(type === "video") form.append("video", file);
       else form.append("document", file);
       const api = type === "photo" ? "sendPhoto" : type === "video" ? "sendVideo" : "sendDocument";
-      const chat_id = document.getElementById('sendAdminId').value.trim();
+      // 用自己的 admin_id 做 chat_id，只是为了上传
+      const chat_id = document.getElementById('sendAdminId').value.trim() ||
+                      document.getElementById('broadcastAdminId').value.trim();
       form.append("chat_id", chat_id);
       const res = await fetch(`https://api.telegram.org/bot${botToken}/${api}`, {method:"POST", body: form});
       const data = await res.json();
@@ -212,6 +235,37 @@
       const d = await res.json();
       if(d.ok) showModal('消息已发送!');
       else showModal('发送失败:'+(d.error||JSON.stringify(d)));
+    };
+
+    // 群发通知
+    document.getElementById('broadcastForm').onsubmit = async (e)=>{
+      e.preventDefault();
+      const bot_name = document.getElementById('broadcastBotSelect').value;
+      const admin_id = document.getElementById('broadcastAdminId').value.trim();
+      const text = document.getElementById('broadcastMsg').value;
+      const fileInput = document.getElementById('broadcastFile');
+      const fileType = document.getElementById('broadcastFileType').value;
+      let fileUrl = "";
+      const botsRes = await fetch(workerApiBase + "/bots");
+      const bots = await botsRes.json();
+      const botToken = bots[bot_name].token;
+
+      if(fileInput.files.length && fileType){
+        fileUrl = await uploadToTelegram(botToken, fileInput.files[0], fileType);
+        if(!fileUrl) {
+          showModal('文件上传失败');
+          return;
+        }
+      }
+
+      const res = await fetch(workerApiBase + "/broadcast", {
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({api_pass,bot_name,admin_id,text,fileType,fileUrl})
+      });
+      const d = await res.json();
+      if(d.ok) showModal('群发成功！本次发送：'+d.count+'人');
+      else showModal('群发失败:'+(d.error||JSON.stringify(d)));
     };
 
     window.onload = function(){
