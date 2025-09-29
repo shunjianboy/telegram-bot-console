@@ -1,168 +1,177 @@
-export default {
-  async fetch(request, env, ctx) {
-    const url = new URL(request.url);
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <title>Telegram Bot 管理后台</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 2em; }
+    input, button { padding: .5em; margin: .5em 0; }
+    .log { margin-top: 2em; }
+    textarea { width: 100%; min-height: 50px; }
+    #loginBox { margin-bottom: 2em; }
+    #modal { display:none; position:fixed; left:0; top:0; width:100vw; height:100vh; z-index:999; background:rgba(0,0,0,0.4); align-items:center; justify-content:center;}
+    #modal .content { background:#fff; padding:2em 3em; border-radius: 8px; }
+    .chat-id-mask { font-family:monospace; font-size:0.95em; color:#555; }
+  </style>
+</head>
+<body>
+  <div id="loginBox">
+    <h2>后台登录</h2>
+    <input type="password" id="adminPwd" placeholder="请输入后台密码">
+    <button onclick="login()">登录</button>
+  </div>
+  <div id="mainBox" style="display:none;">
+    <h1>Telegram Bot 管理后台</h1>
+    <h2>发送消息</h2>
+    <form id="sendForm">
+      <label>Chat ID:
+        <input type="text" id="chat_id" required>
+      </label><br>
+      <label>消息内容:
+        <textarea id="msg" required></textarea>
+      </label><br>
+      <button type="submit">发送</button>
+    </form>
+    <h2>最近聊天记录</h2>
+    <button onclick="loadLogs()">刷新聊天记录</button>
+    <div id="logs" class="log"></div>
+  </div>
 
-    // 统一返回JSON并加CORS头
-    function jsonResponse(body, status = 200, extraHeaders = {}) {
-      return new Response(
-        typeof body === "string" ? body : JSON.stringify(body),
-        {
-          status,
+  <div id="modal">
+    <div class="content" id="modalContent"></div>
+  </div>
+
+  <script>
+    // 配置
+    const workerApiBase = "https://telegram-bot-api.shunjianboy-e0e.workers.dev/api";
+    let token = localStorage.getItem('adminToken') || "";
+
+    // 登录功能
+    function showMain() {
+      document.getElementById('loginBox').style.display = 'none';
+      document.getElementById('mainBox').style.display = '';
+      loadLogs();
+    }
+    function showLogin() {
+      document.getElementById('loginBox').style.display = '';
+      document.getElementById('mainBox').style.display = 'none';
+    }
+
+    async function login() {
+      const pwd = document.getElementById('adminPwd').value;
+      try {
+        const res = await fetch(workerApiBase + '/login', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ password: pwd })
+        });
+        const data = await res.json();
+        if(data.ok && data.token) {
+          localStorage.setItem('adminToken', data.token);
+          token = data.token;
+          showMain();
+        } else {
+          showModal('密码错误');
+        }
+      } catch (e) {
+        showModal('请求失败：' + e);
+      }
+    }
+
+    // 弹窗
+    function showModal(msg) {
+      document.getElementById('modalContent').innerText = msg;
+      document.getElementById('modal').style.display = 'flex';
+    }
+    document.getElementById('modal').onclick = function(){this.style.display='none'};
+
+    // 发送消息
+    document.getElementById('sendForm').onsubmit = async (e) => {
+      e.preventDefault();
+      const chat_id = document.getElementById('chat_id').value;
+      const text = document.getElementById('msg').value;
+      if(!chat_id || !text) {
+        showModal('Chat ID 和消息内容不能为空！');
+        return;
+      }
+      try {
+        const res = await fetch(workerApiBase + '/send', {
+          method: 'POST',
           headers: {
-            "Content-Type": "application/json",
-            "Access-Control-Allow-Origin": "*",
-            ...extraHeaders,
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + token
           },
-        }
-      );
-    }
-
-    // 生成简单Token（实际项目建议用JWT）
-    function genToken() {
-      // 时间戳+随机数+签名hash（这里只做简单示例）
-      return btoa(Date.now() + ":" + Math.random() + ":" + env.ADMIN_PASS);
-    }
-
-    // 校验token是否有效
-    function checkAuth(request) {
-      const auth = request.headers.get("Authorization");
-      if (!auth || !auth.startsWith("Bearer ")) return false;
-      const token = auth.slice(7);
-      // 实际项目建议用JWT并校验过期时间，这里只做演示
-      // 简单校验token格式里包含ADMIN_PASS
-      try {
-        const decoded = atob(token);
-        if (decoded.includes(env.ADMIN_PASS)) return true;
-      } catch {}
-      return false;
-    }
-
-    // 处理 CORS 预检
-    if (request.method === "OPTIONS") {
-      return new Response(null, {
-        status: 204,
-        headers: {
-          "Access-Control-Allow-Origin": "*",
-          "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
-          "Access-Control-Allow-Headers": "Content-Type,Authorization",
-        },
-      });
-    }
-
-    // 登录接口
-    if (url.pathname === "/api/login" && request.method === "POST") {
-      try {
-        const { password } = await request.json();
-        if (password === env.ADMIN_PASS) {
-          const token = genToken();
-          return jsonResponse({ ok: true, token });
-        }
-        return jsonResponse({ ok: false, error: "密码错误" }, 401);
-      } catch (err) {
-        return jsonResponse({ ok: false, error: err.message }, 500);
-      }
-    }
-
-    // 需要认证的接口
-    if (url.pathname === "/api/send" && request.method === "POST") {
-      if (!checkAuth(request)) {
-        return jsonResponse({ ok: false, error: "未授权，请重新登录" }, 401);
-      }
-      try {
-        const { chat_id, text } = await request.json();
-        const tgRes = await fetch(
-          `https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendMessage`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ chat_id, text }),
-          }
-        );
-        const tgResult = await tgRes.text();
+          body: JSON.stringify({ chat_id, text })
+        });
         let result;
-        try {
-          result = JSON.parse(tgResult);
-        } catch {
-          result = tgResult;
-        }
-        return jsonResponse(result, tgRes.status);
-      } catch (err) {
-        return jsonResponse({ ok: false, error: err.message }, 500);
-      }
-    }
-
-    if (url.pathname === "/api/logs" && request.method === "GET") {
-      if (!checkAuth(request)) {
-        return jsonResponse({ ok: false, error: "未授权，请重新登录" }, 401);
-      }
-      try {
-        if (!env.telegram_bot)
-          return jsonResponse("D1 数据库未绑定", 500);
-        const { results } = await env.telegram_bot
-          .prepare(
-            "SELECT * FROM chat_logs ORDER BY created_at DESC LIMIT 10"
-          )
-          .all();
-        return jsonResponse(results);
-      } catch (err) {
-        return jsonResponse({ ok: false, error: err.message }, 500);
-      }
-    }
-
-    if (url.pathname === "/api/lastmsg" && request.method === "GET") {
-      if (!checkAuth(request)) {
-        return jsonResponse({ ok: false, error: "未授权，请重新登录" }, 401);
-      }
-      try {
-        const chat_id = url.searchParams.get("chat_id");
-        if (!chat_id) return jsonResponse("缺少 chat_id", 400);
-        if (!env.TELEGRAM_BOT_USERS)
-          return jsonResponse("KV 未绑定", 500);
-        const msg = await env.TELEGRAM_BOT_USERS.get(`last_msg_${chat_id}`);
-        return jsonResponse(msg ?? "无记录");
-      } catch (err) {
-        return jsonResponse({ ok: false, error: err.message }, 500);
-      }
-    }
-
-    // Webhook接口不需要Auth
-    if (url.pathname === "/api/webhook" && request.method === "POST") {
-      try {
-        const update = await request.json();
-        if (update.message) {
-          const chat_id = update.message.chat.id;
-          const text = update.message.text;
-          // 存储到 D1
-          if (env.telegram_bot) {
-            await env.telegram_bot
-              .prepare(
-                "INSERT INTO chat_logs (chat_id, message, created_at) VALUES (?, ?, ?)"
-              )
-              .bind(chat_id, text, Date.now())
-              .run();
+        try { result = await res.json(); } catch(e) { result = await res.text(); }
+        if(result.ok) {
+          showModal('发送成功！');
+        } else if(result.error) {
+          if(result.error.includes('未授权')) {
+            localStorage.removeItem('adminToken');
+            token = "";
+            showLogin();
+            showModal('身份过期，请重新登录');
+          } else {
+            showModal('发送失败：' + JSON.stringify(result));
           }
-          // 存储到 KV
-          if (env.TELEGRAM_BOT_USERS) {
-            await env.TELEGRAM_BOT_USERS.put(`last_msg_${chat_id}`, text);
-          }
-          // 自动回复
-          const reply = `你刚刚说了：${text}`;
-          await fetch(
-            `https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendMessage`,
-            {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ chat_id, text: reply }),
-            }
-          );
+        } else {
+          showModal('发送失败：' + JSON.stringify(result));
         }
-        return jsonResponse({ ok: true });
       } catch (err) {
-        return jsonResponse({ ok: false, error: err.message }, 500);
+        showModal('请求失败：' + err);
+      }
+    };
+
+    // 聊天记录遮掩chat_id
+    function maskChatId(chat_id) {
+      if(!chat_id || chat_id.length < 8) return chat_id;
+      return chat_id.slice(0,4) + '****' + chat_id.slice(-4);
+    }
+
+    // 获取聊天记录
+    async function loadLogs() {
+      const logsDiv = document.getElementById('logs');
+      logsDiv.innerHTML = "加载中...";
+      try {
+        const res = await fetch(workerApiBase + '/logs', {
+          headers: {
+            'Authorization': 'Bearer ' + token
+          }
+        });
+        if(res.status === 401) {
+          localStorage.removeItem('adminToken');
+          token = "";
+          showLogin();
+          showModal('身份过期，请重新登录');
+          return;
+        }
+        const logs = await res.json();
+        let html = '<ol>';
+        for (const log of logs) {
+          html += `<li>
+            <span class="chat-id-mask">${maskChatId(log.chat_id)}</span>
+            : ${log.message}
+            <small style="color:#888">${new Date(log.created_at).toLocaleString()}</small>
+            <button onclick="document.getElementById('chat_id').value='${log.chat_id}';">填入ChatID</button>
+          </li>`;
+        }
+        html += '</ol>';
+        logsDiv.innerHTML = html;
+      } catch (err) {
+        logsDiv.innerHTML = '获取聊天记录失败：' + err;
       }
     }
 
-    // 默认404
-    return jsonResponse("Not found", 404);
-  },
-};
+    // 页面加载时自动校验token
+    window.onload = function() {
+      if(token) {
+        showMain();
+      } else {
+        showLogin();
+      }
+    }
+  </script>
+</body>
+</html>
