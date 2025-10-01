@@ -97,6 +97,16 @@
       </form>
       <div id="kwList"></div>
     </div>
+    <div class="section">
+      <h2>启动消息设置</h2>
+      <label>选择Bot:
+        <select id="startMsgBotSelect"></select>
+      </label>
+      <form id="startMsgForm">
+        <textarea id="startMsgText" placeholder="请输入启动欢迎语"></textarea>
+        <button type="submit">保存</button>
+      </form>
+    </div>
   </div>
   <div id="modal">
     <div class="content" id="modalContent"></div>
@@ -156,6 +166,9 @@
       document.getElementById('sendBotSelect').innerHTML = options;
       document.getElementById('broadcastBotSelect').innerHTML = options;
       document.getElementById('kwBotSelect').innerHTML = options;
+      document.getElementById('startMsgBotSelect').innerHTML = options;
+      // 启动消息区联动
+      loadStartMsg();
     }
     async function deleteBot(bot_name) {
       if(!confirm('确定要删除Bot：'+bot_name+'？')) return;
@@ -329,6 +342,29 @@
       });
       loadKeywords();
     }
+
+    // 启动消息管理
+    async function loadStartMsg() {
+      const bot_name = document.getElementById('startMsgBotSelect').value;
+      if(!bot_name) return;
+      const res = await fetch(workerApiBase + `/startmsg?bot_name=${encodeURIComponent(bot_name)}`);
+      const d = await res.json();
+      document.getElementById('startMsgText').value = d.startmsg || "";
+    }
+    document.getElementById('startMsgBotSelect').onchange = loadStartMsg;
+    document.getElementById('startMsgForm').onsubmit = async (e)=>{
+      e.preventDefault();
+      const bot_name = document.getElementById('startMsgBotSelect').value;
+      const startmsg = document.getElementById('startMsgText').value;
+      const res = await fetch(workerApiBase + "/startmsg", {
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({api_pass,bot_name,startmsg})
+      });
+      const d = await res.json();
+      if(d.ok) showModal('启动消息已保存');
+      else showModal('保存失败:'+d.error);
+    };
 
     window.onload = function(){
       if(api_pass) showMain();
