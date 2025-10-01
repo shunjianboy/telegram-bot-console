@@ -235,6 +235,7 @@
       form.append("chat_id", chat_id);
       const res = await fetch(`https://api.telegram.org/bot${botToken}/${api}`, {method:"POST", body: form});
       const data = await res.json();
+      console.log("upload result", data);
       if(data && data.result) {
         if(type === "photo") return data.result.photo[data.result.photo.length-1].file_id;
         if(type === "video") return data.result.video.file_id;
@@ -397,3 +398,4 @@
   </script>
 </body>
 </html>
+
