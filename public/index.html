@@ -55,7 +55,6 @@
           <select id="fileType">
             <option value="">请选择类型</option>
             <option value="photo">图片</option>
-            <option value="video">视频</option>
             <option value="document">普通文件</option>
           </select>
         </label><br>
@@ -73,7 +72,6 @@
           <select id="broadcastFileType">
             <option value="">请选择类型</option>
             <option value="photo">图片</option>
-            <option value="video">视频</option>
             <option value="document">普通文件</option>
           </select>
         </label><br>
@@ -106,9 +104,11 @@
         <select id="startMsgType">
           <option value="none">纯文字</option>
           <option value="photo">图片</option>
-          <option value="video">视频</option>
         </select>
-        <input type="file" id="startMsgFile">
+        <label id="photoUrlLabel" style="display:inline;">
+          图片链接（上传到 <a href="https://image.a5fe.com/" target="_blank">图床</a> 后粘贴链接）:
+          <input type="text" id="startMsgPhotoUrl" placeholder="https://image.a5fe.com/xxx.jpg">
+        </label>
         <textarea id="startMsgText" placeholder="请输入启动欢迎语"></textarea>
         <button type="submit">保存</button>
       </form>
@@ -221,29 +221,6 @@
       document.getElementById('customersDiv').innerHTML = html;
     }
 
-    // 上传文件到 Telegram 服务器（返回 fileId）
-    async function uploadToTelegram(botToken, file, type) {
-      const form = new FormData();
-      if(type === "photo") form.append("photo", file);
-      else if(type === "video") form.append("video", file);
-      else form.append("document", file);
-      const api = type === "photo" ? "sendPhoto" : type === "video" ? "sendVideo" : "sendDocument";
-      // 用自己的 admin_id 做 chat_id，只是为了上传
-      const chat_id = document.getElementById('sendAdminId').value.trim() ||
-                      document.getElementById('broadcastAdminId').value.trim() ||
-                      document.getElementById('startMsgBotSelect').value;
-      form.append("chat_id", chat_id);
-      const res = await fetch(`https://api.telegram.org/bot${botToken}/${api}`, {method:"POST", body: form});
-      const data = await res.json();
-      console.log("upload result", data);
-      if(data && data.result) {
-        if(type === "photo") return data.result.photo[data.result.photo.length-1].file_id;
-        if(type === "video") return data.result.video.file_id;
-        if(type === "document") return data.result.document.file_id;
-      }
-      return "";
-    }
-
     document.getElementById('sendForm').onsubmit = async (e)=>{
       e.preventDefault();
       const bot_name = document.getElementById('sendBotSelect').value;
@@ -258,7 +235,15 @@
       const botToken = bots[bot_name].token;
 
       if(fileInput.files.length && fileType){
-        fileUrl = await uploadToTelegram(botToken, fileInput.files[0], fileType);
+        // 这里依然调用Telegram上传接口（sendPhoto/sendDocument）
+        const form = new FormData();
+        if(fileType === "photo") form.append("photo", fileInput.files[0]);
+        else form.append("document", fileInput.files[0]);
+        form.append("chat_id", admin_id);
+        const resUpload = await fetch(`https://api.telegram.org/bot${botToken}/${fileType === "photo" ? "sendPhoto" : "sendDocument"}`, {method:"POST", body: form});
+        const data = await resUpload.json();
+        if(fileType === "photo" && data && data.result) fileUrl = data.result.photo[data.result.photo.length-1].file_id;
+        if(fileType === "document" && data && data.result) fileUrl = data.result.document.file_id;
         if(!fileUrl) {
           showModal('文件上传失败');
           return;
@@ -289,7 +274,14 @@
       const botToken = bots[bot_name].token;
 
       if(fileInput.files.length && fileType){
-        fileUrl = await uploadToTelegram(botToken, fileInput.files[0], fileType);
+        const form = new FormData();
+        if(fileType === "photo") form.append("photo", fileInput.files[0]);
+        else form.append("document", fileInput.files[0]);
+        form.append("chat_id", admin_id);
+        const resUpload = await fetch(`https://api.telegram.org/bot${botToken}/${fileType === "photo" ? "sendPhoto" : "sendDocument"}`, {method:"POST", body: form});
+        const data = await resUpload.json();
+        if(fileType === "photo" && data && data.result) fileUrl = data.result.photo[data.result.photo.length-1].file_id;
+        if(fileType === "document" && data && data.result) fileUrl = data.result.document.file_id;
         if(!fileUrl) {
           showModal('文件上传失败');
           return;
@@ -357,9 +349,8 @@
       const res = await fetch(workerApiBase + `/startmsg?bot_name=${encodeURIComponent(bot_name)}`);
       const d = await res.json();
       document.getElementById('startMsgType').value = d.type || "none";
+      document.getElementById('startMsgPhotoUrl').value = d.fileUrl || "";
       document.getElementById('startMsgText').value = d.caption || "";
-      // 清空文件选择
-      document.getElementById('startMsgFile').value = "";
     }
     document.getElementById('startMsgBotSelect').onchange = loadStartMsg;
     document.getElementById('startMsgForm').onsubmit = async (e)=>{
@@ -367,24 +358,15 @@
       const bot_name = document.getElementById('startMsgBotSelect').value;
       const type = document.getElementById('startMsgType').value;
       const caption = document.getElementById('startMsgText').value;
-      let fileId = "";
-      if(type === "photo" || type === "video") {
-        const fileInput = document.getElementById('startMsgFile');
-        if(fileInput.files.length) {
-          const botsRes = await fetch(workerApiBase + "/bots");
-          const bots = await botsRes.json();
-          const botToken = bots[bot_name].token;
-          fileId = await uploadToTelegram(botToken, fileInput.files[0], type);
-          if(!fileId) {
-            showModal('文件上传失败');
-            return;
-          }
-        }
+      const fileUrl = document.getElementById('startMsgPhotoUrl').value.trim();
+      if(type === "photo" && !fileUrl) {
+        showModal('请粘贴经过图床上传后的图片链接');
+        return;
       }
       const res = await fetch(workerApiBase + "/startmsg", {
         method:"POST",
         headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({api_pass,bot_name,type,fileId,caption})
+        body:JSON.stringify({api_pass,bot_name,type,fileUrl,caption})
       });
       const d = await res.json();
       if(d.ok) showModal('启动消息已保存');
@@ -398,4 +380,3 @@
   </script>
 </body>
 </html>
-
