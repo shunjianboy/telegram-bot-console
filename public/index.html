@@ -103,6 +103,12 @@
         <select id="startMsgBotSelect"></select>
       </label>
       <form id="startMsgForm">
+        <select id="startMsgType">
+          <option value="none">纯文字</option>
+          <option value="photo">图片</option>
+          <option value="video">视频</option>
+        </select>
+        <input type="file" id="startMsgFile">
         <textarea id="startMsgText" placeholder="请输入启动欢迎语"></textarea>
         <button type="submit">保存</button>
       </form>
@@ -167,7 +173,6 @@
       document.getElementById('broadcastBotSelect').innerHTML = options;
       document.getElementById('kwBotSelect').innerHTML = options;
       document.getElementById('startMsgBotSelect').innerHTML = options;
-      // 启动消息区联动
       loadStartMsg();
     }
     async function deleteBot(bot_name) {
@@ -225,7 +230,8 @@
       const api = type === "photo" ? "sendPhoto" : type === "video" ? "sendVideo" : "sendDocument";
       // 用自己的 admin_id 做 chat_id，只是为了上传
       const chat_id = document.getElementById('sendAdminId').value.trim() ||
-                      document.getElementById('broadcastAdminId').value.trim();
+                      document.getElementById('broadcastAdminId').value.trim() ||
+                      document.getElementById('startMsgBotSelect').value;
       form.append("chat_id", chat_id);
       const res = await fetch(`https://api.telegram.org/bot${botToken}/${api}`, {method:"POST", body: form});
       const data = await res.json();
@@ -349,17 +355,35 @@
       if(!bot_name) return;
       const res = await fetch(workerApiBase + `/startmsg?bot_name=${encodeURIComponent(bot_name)}`);
       const d = await res.json();
-      document.getElementById('startMsgText').value = d.startmsg || "";
+      document.getElementById('startMsgType').value = d.type || "none";
+      document.getElementById('startMsgText').value = d.caption || "";
+      // 清空文件选择
+      document.getElementById('startMsgFile').value = "";
     }
     document.getElementById('startMsgBotSelect').onchange = loadStartMsg;
     document.getElementById('startMsgForm').onsubmit = async (e)=>{
       e.preventDefault();
       const bot_name = document.getElementById('startMsgBotSelect').value;
-      const startmsg = document.getElementById('startMsgText').value;
+      const type = document.getElementById('startMsgType').value;
+      const caption = document.getElementById('startMsgText').value;
+      let fileId = "";
+      if(type === "photo" || type === "video") {
+        const fileInput = document.getElementById('startMsgFile');
+        if(fileInput.files.length) {
+          const botsRes = await fetch(workerApiBase + "/bots");
+          const bots = await botsRes.json();
+          const botToken = bots[bot_name].token;
+          fileId = await uploadToTelegram(botToken, fileInput.files[0], type);
+          if(!fileId) {
+            showModal('文件上传失败');
+            return;
+          }
+        }
+      }
       const res = await fetch(workerApiBase + "/startmsg", {
         method:"POST",
         headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({api_pass,bot_name,startmsg})
+        body:JSON.stringify({api_pass,bot_name,type,fileId,caption})
       });
       const d = await res.json();
       if(d.ok) showModal('启动消息已保存');
