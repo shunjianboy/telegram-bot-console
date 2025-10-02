@@ -1,22 +1,59 @@
+/* 全局样式 */
 body {
     min-height: 100vh;
     background-color: #f8f9fa;
 }
 
+/* 侧边栏样式 */
 .sidebar {
-    height: 100vh;
+    min-height: 100vh;
     position: sticky;
     top: 0;
 }
 
+/* 主内容区样式 */
 .main-content {
-    flex: 1;
+    flex-grow: 1;
+    background-color: #fff;
+    min-height: 100vh;
 }
 
+/* 表单元素样式 */
+.form-control:focus, .form-select:focus {
+    border-color: #0d6efd;
+    box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+}
+
+/* 按钮悬停效果 */
+.btn-primary:hover {
+    background-color: #0b5ed7;
+    border-color: #0a58ca;
+}
+
+/* 卡片样式 */
+.card {
+    border-radius: 0.5rem;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+/* 加载动画容器 */
+#loading {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(255, 255, 255, 0.8);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+}
+
+/* 导航链接样式 */
 .nav-link {
-    border-radius: 0;
-    padding: 0.5rem 1rem;
-    margin-bottom: 0.2rem;
+    border-radius: 0.25rem;
+    margin-bottom: 0.5rem;
 }
 
 .nav-link:hover {
@@ -24,36 +61,21 @@ body {
 }
 
 .nav-link.active {
-    background-color: #0d6efd;
+    background-color: #0d6efd !important;
 }
 
-#botInfo, #keywordsList, #customersList {
-    min-height: 100px;
-}
-
-.keyword-item {
-    border-bottom: 1px solid #eee;
-    padding: 10px 0;
-}
-
-.keyword-item:last-child {
-    border-bottom: none;
-}
-
-#keywordsTable td {
+/* 表格样式 */
+.table {
     vertical-align: middle;
 }
 
-.text-truncate-container {
-    max-width: 250px;
-}
-
-.text-truncate-container p {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
+/* 警告消息样式 */
 .alert {
-    margin-top: 15px;
+    border-radius: 0.5rem;
+}
+
+/* 模态框样式 */
+.modal-content {
+    border-radius: 0.5rem;
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
 }

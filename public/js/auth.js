@@ -1,82 +1,74 @@
-// auth.js - 处理登录和认证
+// 认证相关功能
+
 document.addEventListener('DOMContentLoaded', function() {
+    // 处理登录
     const loginForm = document.getElementById('loginForm');
-    const loginError = document.getElementById('loginError');
-    const logoutBtn = document.getElementById('logoutBtn');
-    
-    // 检查是否已登录
-    checkAuth();
-    
-    // 处理登录表单提交
     if (loginForm) {
-        loginForm.addEventListener('submit', function(e) {
+        loginForm.addEventListener('submit', async function(e) {
             e.preventDefault();
             
             const password = document.getElementById('password').value;
+            const loginError = document.getElementById('loginError');
             
-            // 发送登录请求
-            fetch(`${API_BASE}/api/login`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ password })
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.ok) {
-                    // 保存API密码和登录状态
-                    localStorage.setItem('api_pass', password);
-                    localStorage.setItem('is_logged_in', 'true');
+            try {
+                loginError.classList.add('d-none');
+                
+                const response = await login(password);
+                
+                if (response.token) {
+                    // 保存token到本地存储
+                    localStorage.setItem('auth_token', response.token);
                     
-                    // 重要：保存当前用户ID (如果没有则使用默认ID 1234567)
-                    const adminId = prompt("请输入您的Telegram用户ID:", "");
-                    if (adminId) {
-                        localStorage.setItem('adminId', adminId);
-                    } else {
-                        localStorage.setItem('adminId', "1234567");
-                    }
-                    
-                    // 跳转到后台
-                    window.location.href = 'dashboard.html';
+                    // 登录成功，重定向到仪表板
+                    window.location.href = '/dashboard';
                 } else {
-                    showError(loginError, data.error || '登录失败');
+                    // 显示错误信息
+                    loginError.textContent = response.error || '密码错误';
+                    loginError.classList.remove('d-none');
                 }
-            })
-            .catch(err => {
-                console.error('登录出错:', err);
-                showError(loginError, '网络错误，请重试');
-            });
+            } catch (error) {
+                console.error('登录失败:', error);
+                loginError.textContent = '网络错误，请重试';
+                loginError.classList.remove('d-none');
+            }
         });
     }
-    
-    // 退出登录
+
+    // 处理登出
+    const logoutBtn = document.getElementById('logoutBtn');
     if (logoutBtn) {
-        logoutBtn.addEventListener('click', function() {
-            localStorage.removeItem('api_pass');
-            localStorage.removeItem('is_logged_in');
-            localStorage.removeItem('adminId');
-            window.location.href = 'index.html';
+        logoutBtn.addEventListener('click', async function() {
+            try {
+                await logout();
+                // 重定向到登录页
+                window.location.href = '/';
+            } catch (error) {
+                console.error('登出失败:', error);
+                // 即使API调用失败，也强制返回登录页
+                window.location.href = '/';
+            }
         });
     }
-    
-    // 检查是否已登录，如果未登录则跳转到登录页面
-    function checkAuth() {
-        const isLoggedIn = localStorage.getItem('is_logged_in');
-        const currentPage = window.location.pathname.split('/').pop();
-        
-        if (!isLoggedIn && currentPage !== 'index.html') {
-            window.location.href = 'index.html';
-        } else if (isLoggedIn && currentPage === 'index.html') {
-            window.location.href = 'dashboard.html';
-        }
-    }
-    
-    function showError(element, message) {
-        element.innerHTML = message;
-        element.classList.remove('d-none');
-        setTimeout(() => {
-            element.classList.add('d-none');
-        }, 5000);
+
+    // 检查认证状态
+    // 如果在管理页面，确保用户已登录
+    if (window.location.pathname.includes('dashboard')) {
+        checkAuthStatus();
     }
 });
+
+// 检查认证状态
+async function checkAuthStatus() {
+    try {
+        const result = await checkAuth();
+        
+        if (!result.authenticated) {
+            // 未认证，重定向到登录页
+            window.location.href = '/';
+        }
+    } catch (error) {
+        console.error('检查认证状态失败:', error);
+        // 出错时也重定向到登录页
+        window.location.href = '/';
+    }
+}
