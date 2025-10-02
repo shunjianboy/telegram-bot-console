@@ -1,247 +1,382 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Telegram Bot 管理后台</title>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/css/bootstrap.min.css">
-  <style>
-    .sidebar {
-      position: fixed;
-      top: 0;
-      bottom: 0;
-      left: 0;
-      z-index: 100;
-      padding: 48px 0 0;
-      box-shadow: inset -1px 0 0 rgba(0, 0, 0, .1);
-    }
-    .nav-link {
-      font-weight: 500;
-      color: #333;
-    }
-    .nav-link.active {
-      color: #0d6efd;
-    }
-    main {
-      padding-top: 48px;
-    }
-    .tab-content {
-      padding: 20px 0;
-    }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Telegram Bot 管理后台</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="css/style.css">
 </head>
-<body>
-  <header class="navbar navbar-dark sticky-top bg-dark flex-md-nowrap p-0 shadow">
-    <a class="navbar-brand col-md-3 col-lg-2 me-0 px-3" href="#">Telegram Bot 管理后台</a>
-    <button class="navbar-toggler d-md-none collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#sidebarMenu">
-      <span class="navbar-toggler-icon"></span>
-    </button>
-    <div class="navbar-nav">
-      <div class="nav-item text-nowrap">
-        <a class="nav-link px-3" href="#" onclick="logout()">退出登录</a>
-      </div>
+<body class="d-flex">
+    <!-- 侧边栏 -->
+    <div class="d-flex flex-column flex-shrink-0 p-3 text-white bg-dark sidebar" style="width: 250px;">
+        <h3 class="text-center">Telegram Bot 管理后台</h3>
+        <hr>
+        <ul class="nav nav-pills flex-column mb-auto">
+            <li class="nav-item">
+                <a href="#" class="nav-link text-white active" data-page="bot-manage">
+                    <i class="bi bi-robot me-2"></i>
+                    Bot 管理
+                </a>
+            </li>
+            <li>
+                <a href="#" class="nav-link text-white" data-page="keywords">
+                    <i class="bi bi-chat-left-text me-2"></i>
+                    关键词回复
+                </a>
+            </li>
+            <li>
+                <a href="#" class="nav-link text-white" data-page="broadcast">
+                    <i class="bi bi-megaphone me-2"></i>
+                    群发消息
+                </a>
+            </li>
+            <li>
+                <a href="#" class="nav-link text-white" data-page="start-msg">
+                    <i class="bi bi-play-circle me-2"></i>
+                    启动消息
+                </a>
+            </li>
+            <li>
+                <a href="#" class="nav-link text-white" data-page="customer-manage">
+                    <i class="bi bi-people me-2"></i>
+                    客户管理
+                </a>
+            </li>
+        </ul>
+        <hr>
+        <button class="btn btn-danger" id="logoutBtn">退出登录</button>
     </div>
-  </header>
 
-  <div class="container-fluid">
-    <div class="row">
-      <nav id="sidebarMenu" class="col-md-3 col-lg-2 d-md-block bg-light sidebar collapse">
-        <div class="position-sticky pt-3">
-          <ul class="nav flex-column">
-            <li class="nav-item">
-              <a class="nav-link active" href="#bot-management" data-bs-toggle="tab">
-                Bot 管理
-              </a>
-            </li>
-            <li class="nav-item">
-              <a class="nav-link" href="#keyword-reply" data-bs-toggle="tab">
-                关键词回复
-              </a>
-            </li>
-            <li class="nav-item">
-              <a class="nav-link" href="#broadcast" data-bs-toggle="tab">
-                群发消息
-              </a>
-            </li>
-          </ul>
+    <!-- 主内容区 -->
+    <div class="container-fluid p-4 main-content">
+        <!-- Bot 管理 -->
+        <div class="content-section" id="bot-manage">
+            <h2 class="mb-4">Bot 管理</h2>
+            <div class="mb-3">
+                <label class="form-label">选择 Bot</label>
+                <select class="form-select mb-3" id="botSelect">
+                    <option value="" disabled selected>请选择一个Bot</option>
+                </select>
+            </div>
+            <div class="card mb-4">
+                <div class="card-body">
+                    <h5 class="card-title">Bot 信息</h5>
+                    <div id="botInfo" class="mt-3">
+                        <!-- Bot信息将在这里显示 -->
+                    </div>
+                </div>
+            </div>
+            <button class="btn btn-primary" id="addBotBtn">添加新 Bot</button>
+            
+            <!-- 添加Bot模态框 -->
+            <div class="modal fade" id="addBotModal" tabindex="-1">
+                <div class="modal-dialog">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title">添加新Bot</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <div class="modal-body">
+                            <form id="addBotForm">
+                                <div class="mb-3">
+                                    <label for="botName" class="form-label">Bot名称</label>
+                                    <input type="text" class="form-control" id="botName" required>
+                                    <div class="form-text">用于在管理后台区分不同Bot的名称</div>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="botToken" class="form-label">Bot Token</label>
+                                    <input type="text" class="form-control" id="botToken" required>
+                                    <div class="form-text">从@BotFather获取的Bot Token</div>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="botAdmins" class="form-label">管理员ID列表</label>
+                                    <input type="text" class="form-control" id="botAdmins" required>
+                                    <div class="form-text">多个ID请用英文逗号分隔，例如：123456789,987654321</div>
+                                </div>
+                            </form>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                            <button type="button" class="btn btn-primary" id="saveBotBtn">保存</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
-      </nav>
 
-      <main class="col-md-9 ms-sm-auto col-lg-10 px-md-4">
-        <div class="tab-content">
-          <!-- Bot 管理 -->
-          <div class="tab-pane active" id="bot-management">
-            <h2>Bot 管理</h2>
-            <div class="row mb-3">
-              <div class="col-md-6">
-                <label for="bot-select" class="form-label">选择 Bot</label>
-                <select class="form-select" id="bot-select"></select>
-              </div>
+        <!-- 关键词回复 -->
+        <div class="content-section d-none" id="keywords">
+            <h2 class="mb-4">关键词自动回复</h2>
+            <div class="mb-3">
+                <label class="form-label">选择 Bot</label>
+                <select class="form-select mb-3" id="keywordBotSelect">
+                    <option value="" disabled selected>请选择一个Bot</option>
+                </select>
+            </div>
+            <div class="card mb-4">
+                <div class="card-body">
+                    <h5 class="card-title">已设置的关键词</h5>
+                    <div id="keywordsList" class="mt-3">
+                        <!-- 关键词列表将在这里显示 -->
+                        <table class="table table-striped table-hover d-none" id="keywordsTable">
+                            <thead>
+                                <tr>
+                                    <th>类型</th>
+                                    <th>关键词</th>
+                                    <th>回复内容</th>
+                                    <th>操作</th>
+                                </tr>
+                            </thead>
+                            <tbody id="keywordsTableBody">
+                            </tbody>
+                        </table>
+                        <div id="noKeywords" class="alert alert-info">
+                            暂无关键词配置
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <button class="btn btn-primary" id="addKeywordBtn">添加关键词</button>
+            
+            <!-- 添加关键词模态框 -->
+            <div class="modal fade" id="addKeywordModal" tabindex="-1">
+                <div class="modal-dialog">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title">添加关键词回复</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <div class="modal-body">
+                            <form id="addKeywordForm">
+                                <div class="mb-3">
+                                    <label for="keywordType" class="form-label">匹配类型</label>
+                                    <select class="form-select" id="keywordType" required>
+                                        <option value="equal">完全匹配</option>
+                                        <option value="contain">包含匹配</option>
+                                    </select>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="keyword" class="form-label">关键词</label>
+                                    <input type="text" class="form-control" id="keyword" required>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="keywordReply" class="form-label">回复内容</label>
+                                    <textarea class="form-control" id="keywordReply" rows="4" required></textarea>
+                                </div>
+                            </form>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                            <button type="button" class="btn btn-primary" id="saveKeywordBtn">保存</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 群发消息 -->
+        <div class="content-section d-none" id="broadcast">
+            <h2 class="mb-4">群发消息</h2>
+            <div class="mb-3">
+                <label class="form-label">选择 Bot</label>
+                <select class="form-select mb-3" id="broadcastBotSelect">
+                    <option value="" disabled selected>请选择一个Bot</option>
+                </select>
+            </div>
+            <div class="card mb-4">
+                <div class="card-body">
+                    <h5 class="card-title">群发消息</h5>
+                    <form id="broadcastForm" class="mt-3">
+                        <div class="mb-3">
+                            <label class="form-label">消息类型</label>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="messageType" id="textType" value="text" checked>
+                                <label class="form-check-label" for="textType">
+                                    纯文本
+                                </label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="messageType" id="photoType" value="photo">
+                                <label class="form-check-label" for="photoType">
+                                    图片
+                                </label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="messageType" id="fileType" value="document">
+                                <label class="form-check-label" for="fileType">
+                                    文件
+                                </label>
+                            </div>
+                        </div>
+                        <div class="mb-3" id="fileUrlContainer" style="display: none;">
+                            <label for="fileUrl" class="form-label">文件/图片链接</label>
+                            <input type="text" class="form-control" id="fileUrl" placeholder="请输入直接可访问的文件URL">
+                        </div>
+                        <div class="mb-3">
+                            <label for="messageText" class="form-label">消息内容/图片说明</label>
+                            <textarea class="form-control" id="messageText" rows="4" required></textarea>
+                        </div>
+                        <button type="submit" class="btn btn-primary">发送给所有用户</button>
+                    </form>
+                </div>
+            </div>
+            <div class="alert alert-danger d-none" id="broadcastError"></div>
+            <div class="alert alert-success d-none" id="broadcastSuccess"></div>
+        </div>
+        
+        <!-- 启动消息 -->
+        <div class="content-section d-none" id="start-msg">
+            <h2 class="mb-4">启动消息</h2>
+            <div class="mb-3">
+                <label class="form-label">选择 Bot</label>
+                <select class="form-select mb-3" id="startMsgBotSelect">
+                    <option value="" disabled selected>请选择一个Bot</option>
+                </select>
+            </div>
+            <div class="card mb-4">
+                <div class="card-body">
+                    <h5 class="card-title">启动消息配置</h5>
+                    <p class="card-text">当用户第一次启动机器人或发送 /start 命令时，机器人会自动回复以下消息：</p>
+                    <form id="startMsgForm" class="mt-3">
+                        <div class="mb-3">
+                            <label class="form-label">消息类型</label>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="startMsgType" id="startTextType" value="none" checked>
+                                <label class="form-check-label" for="startTextType">
+                                    纯文本
+                                </label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="startMsgType" id="startPhotoType" value="photo">
+                                <label class="form-check-label" for="startPhotoType">
+                                    图片
+                                </label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="startMsgType" id="startVideoType" value="video">
+                                <label class="form-check-label" for="startVideoType">
+                                    视频
+                                </label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="startMsgType" id="startDocType" value="document">
+                                <label class="form-check-label" for="startDocType">
+                                    文件
+                                </label>
+                            </div>
+                        </div>
+                        <div class="mb-3" id="startFileUrlContainer" style="display: none;">
+                            <label for="startFileUrl" class="form-label">文件/图片/视频链接</label>
+                            <input type="text" class="form-control" id="startFileUrl" placeholder="请输入直接可访问的文件URL">
+                        </div>
+                        <div class="mb-3">
+                            <label for="startMessageText" class="form-label">消息内容/图片说明</label>
+                            <textarea class="form-control" id="startMessageText" rows="4"></textarea>
+                        </div>
+                        <button type="submit" class="btn btn-primary">保存配置</button>
+                    </form>
+                </div>
+            </div>
+            <div class="alert alert-danger d-none" id="startMsgError"></div>
+            <div class="alert alert-success d-none" id="startMsgSuccess"></div>
+        </div>
+        
+        <!-- 客户管理 -->
+        <div class="content-section d-none" id="customer-manage">
+            <h2 class="mb-4">客户管理</h2>
+            <div class="mb-3">
+                <label class="form-label">选择 Bot</label>
+                <select class="form-select mb-3" id="customerBotSelect">
+                    <option value="" disabled selected>请选择一个Bot</option>
+                </select>
+            </div>
+            <div class="card mb-4">
+                <div class="card-body">
+                    <h5 class="card-title">客户列表</h5>
+                    <div id="customersList" class="mt-3">
+                        <div class="alert alert-info d-none" id="loadingCustomers">正在加载客户数据...</div>
+                        <div class="alert alert-danger d-none" id="noCustomers">暂无客户数据</div>
+                        <div id="customersContainer" class="d-none">
+                            <div class="mb-3">
+                                <p>共有 <span id="customerCount">0</span> 位客户</p>
+                            </div>
+                            <div class="table-responsive">
+                                <table class="table table-striped table-hover">
+                                    <thead>
+                                        <tr>
+                                            <th>用户ID</th>
+                                            <th>操作</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="customersTableBody">
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
             
-            <div id="bot-info" class="card mb-4">
-              <div class="card-body">
-                <h5 class="card-title">Bot 信息</h5>
-                <div id="bot-details"></div>
-              </div>
-            </div>
-            
-            <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addBotModal">添加新 Bot</button>
-          </div>
-          
-          <!-- 关键词回复 -->
-          <div class="tab-pane" id="keyword-reply">
-            <h2>关键词自动回复</h2>
-            <div class="table-responsive mb-4">
-              <table class="table table-striped table-hover">
-                <thead>
-                  <tr>
-                    <th>匹配类型</th>
-                    <th>关键词</th>
-                    <th>回复内容</th>
-                    <th>操作</th>
-                  </tr>
-                </thead>
-                <tbody id="keywords-list"></tbody>
-              </table>
-            </div>
-            
-            <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addKeywordModal">添加关键词</button>
-          </div>
-          
-          <!-- 群发消息 -->
-          <div class="tab-pane" id="broadcast">
-            <h2>群发消息</h2>
-            <div class="card">
-              <div class="card-body">
-                <div class="mb-3">
-                  <label for="message-content" class="form-label">消息内容/图片说明</label>
-                  <textarea class="form-control" id="message-content" rows="4"></textarea>
+            <!-- 发送私信模态框 -->
+            <div class="modal fade" id="sendMessageModal" tabindex="-1">
+                <div class="modal-dialog">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title">发送私信</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <div class="modal-body">
+                            <form id="sendMessageForm">
+                                <input type="hidden" id="messageUserId">
+                                <div class="mb-3">
+                                    <label class="form-label">消息类型</label>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="radio" name="pmMessageType" id="pmTextType" value="text" checked>
+                                        <label class="form-check-label" for="pmTextType">
+                                            纯文本
+                                        </label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="radio" name="pmMessageType" id="pmPhotoType" value="photo">
+                                        <label class="form-check-label" for="pmPhotoType">
+                                            图片
+                                        </label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="radio" name="pmMessageType" id="pmFileType" value="document">
+                                        <label class="form-check-label" for="pmFileType">
+                                            文件
+                                        </label>
+                                    </div>
+                                </div>
+                                <div class="mb-3" id="pmFileUrlContainer" style="display: none;">
+                                    <label for="pmFileUrl" class="form-label">文件/图片链接</label>
+                                    <input type="text" class="form-control" id="pmFileUrl" placeholder="请输入直接可访问的文件URL">
+                                </div>
+                                <div class="mb-3">
+                                    <label for="pmMessageText" class="form-label">消息内容/图片说明</label>
+                                    <textarea class="form-control" id="pmMessageText" rows="4" required></textarea>
+                                </div>
+                            </form>
+                            <div class="alert alert-danger d-none" id="pmError"></div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                            <button type="button" class="btn btn-primary" id="sendPmBtn">发送</button>
+                        </div>
+                    </div>
                 </div>
-                
-                <div class="mb-3">
-                  <div class="form-check form-check-inline">
-                    <input class="form-check-input" type="radio" name="message-type" id="type-text" value="text" checked>
-                    <label class="form-check-label" for="type-text">纯文本</label>
-                  </div>
-                  <div class="form-check form-check-inline">
-                    <input class="form-check-input" type="radio" name="message-type" id="type-photo" value="photo">
-                    <label class="form-check-label" for="type-photo">图片</label>
-                  </div>
-                  <div class="form-check form-check-inline">
-                    <input class="form-check-input" type="radio" name="message-type" id="type-file" value="document">
-                    <label class="form-check-label" for="type-file">文件</label>
-                  </div>
-                </div>
-                
-                <div class="mb-3 d-none" id="file-url-container">
-                  <label for="file-url" class="form-label">文件/图片URL</label>
-                  <input type="text" class="form-control" id="file-url">
-                  <small class="form-text text-muted">输入Telegram文件ID或网络URL</small>
-                </div>
-                
-                <div class="alert alert-danger d-none" id="broadcast-error"></div>
-                
-                <button id="broadcast-btn" class="btn btn-primary">发送给所有用户</button>
-              </div>
             </div>
-          </div>
         </div>
-      </main>
     </div>
-  </div>
 
-  <!-- 添加Bot模态框 -->
-  <div class="modal fade" id="addBotModal" tabindex="-1">
-    <div class="modal-dialog">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h5 class="modal-title">添加新Bot</h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-        </div>
-        <div class="modal-body">
-          <form id="add-bot-form">
-            <div class="mb-3">
-              <label for="bot-name" class="form-label">Bot名称</label>
-              <input type="text" class="form-control" id="bot-name">
-            </div>
-            <div class="mb-3">
-              <label for="bot-token" class="form-label">Bot Token</label>
-              <input type="text" class="form-control" id="bot-token">
-            </div>
-            <div class="mb-3">
-              <label for="bot-admins" class="form-label">管理员ID列表 (用逗号分隔)</label>
-              <input type="text" class="form-control" id="bot-admins">
-            </div>
-          </form>
-        </div>
-        <div class="modal-footer">
-          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
-          <button type="button" class="btn btn-primary" id="save-bot-btn">保存</button>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- 添加关键词模态框 -->
-  <div class="modal fade" id="addKeywordModal" tabindex="-1">
-    <div class="modal-dialog">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h5 class="modal-title">添加关键词回复</h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-        </div>
-        <div class="modal-body">
-          <form id="add-keyword-form">
-            <div class="mb-3">
-              <label class="form-label">匹配类型</label>
-              <div class="form-check">
-                <input class="form-check-input" type="radio" name="keyword-match-type" id="match-equal" value="equal" checked>
-                <label class="form-check-label" for="match-equal">完全匹配</label>
-              </div>
-              <div class="form-check">
-                <input class="form-check-input" type="radio" name="keyword-match-type" id="match-contain" value="contain">
-                <label class="form-check-label" for="match-contain">包含关键词</label>
-              </div>
-            </div>
-            <div class="mb-3">
-              <label for="keyword-text" class="form-label">关键词</label>
-              <input type="text" class="form-control" id="keyword-text">
-            </div>
-            <div class="mb-3">
-              <label for="keyword-reply" class="form-label">回复内容</label>
-              <textarea class="form-control" id="keyword-reply" rows="3"></textarea>
-            </div>
-          </form>
-        </div>
-        <div class="modal-footer">
-          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
-          <button type="button" class="btn btn-primary" id="save-keyword-btn">保存</button>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/js/bootstrap.bundle.min.js"></script>
-  <script src="js/main.js"></script>
-  <script>
-    // 显示/隐藏文件URL输入框
-    document.querySelectorAll('input[name="message-type"]').forEach(radio => {
-      radio.addEventListener('change', function() {
-        const fileUrlContainer = document.getElementById('file-url-container');
-        if (this.value === 'text') {
-          fileUrlContainer.classList.add('d-none');
-        } else {
-          fileUrlContainer.classList.remove('d-none');
-        }
-      });
-    });
-    
-    // 登出功能
-    function logout() {
-      localStorage.removeItem('adminPass');
-      window.location.href = 'index.html';
-    }
-  </script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="js/api.js"></script>
+    <script src="js/auth.js"></script>
+    <script src="js/bot.js"></script>
+    <script src="js/broadcast.js"></script>
+    <script src="js/keyword.js"></script>
 </body>
 </html>
