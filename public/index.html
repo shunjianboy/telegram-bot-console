@@ -1,0 +1,388 @@
+export default {
+  async fetch(request, env, ctx) {
+    const url = new URL(request.url);
+
+    function jsonResponse(body, status = 200) {
+      return new Response(
+        typeof body === "string" ? body : JSON.stringify(body),
+        {
+          status,
+          headers: {
+            "Content-Type": "application/json",
+            "Access-Control-Allow-Origin": "*"
+          }
+        }
+      );
+    }
+
+    if (request.method === "OPTIONS") {
+      return new Response(null, {
+        status: 204,
+        headers: {
+          "Access-Control-Allow-Origin": "*",
+          "Access-Control-Allow-Methods": "GET,POST,DELETE,OPTIONS",
+          "Access-Control-Allow-Headers": "Content-Type,Authorization",
+        },
+      });
+    }
+
+    try {
+      // 登录
+      if (url.pathname === "/api/login" && request.method === "POST") {
+        const { password } = await request.json();
+        if (password && password === env.ADMIN_PASS) {
+          return jsonResponse({ ok: true });
+        }
+        return jsonResponse({ ok: false, error: "密码错误" }, 401);
+      }
+
+      // 获取所有Bot配置
+      if (url.pathname === "/api/bots" && request.method === "GET") {
+        const bots = await env.TELEGRAM_BOT_USERS.get("bots", "json") || {};
+        return jsonResponse(bots);
+      }
+      // 新增/更新Bot配置 + 自动设置Webhook
+      if (url.pathname === "/api/bots" && request.method === "POST") {
+        const { api_pass, bot_name, token, admins } = await request.json();
+        if (api_pass !== env.ADMIN_PASS) return jsonResponse({ok:false,error:"未授权"},401);
+        let bots = await env.TELEGRAM_BOT_USERS.get("bots", "json") || {};
+        bots[bot_name] = { token, admins };
+        await env.TELEGRAM_BOT_USERS.put("bots", JSON.stringify(bots));
+        // 自动设置Webhook
+        try {
+          const webhookUrl = `https://${url.hostname}/webhook/${bot_name}`;
+          const r = await fetch(`https://api.telegram.org/bot${token}/setWebhook?url=${encodeURIComponent(webhookUrl)}`);
+          const setWebhookResult = await r.json();
+          if (!setWebhookResult.ok) {
+            return jsonResponse({ok:true, warning: "Bot已添加，但设置Webhook失败："+setWebhookResult.description});
+          }
+        } catch(e) {}
+        return jsonResponse({ok:true});
+      }
+      // 删除Bot配置
+      if (url.pathname === "/api/bots" && request.method === "DELETE") {
+        const { api_pass, bot_name } = await request.json();
+        if (api_pass !== env.ADMIN_PASS) return jsonResponse({ok:false,error:"未授权"},401);
+        let bots = await env.TELEGRAM_BOT_USERS.get("bots", "json") || {};
+        if (bots[bot_name]) {
+          delete bots[bot_name];
+          await env.TELEGRAM_BOT_USERS.put("bots", JSON.stringify(bots));
+          return jsonResponse({ok:true});
+        } else {
+          return jsonResponse({ok:false,error:"未找到Bot"},404);
+        }
+      }
+
+      // 获取客户ID列表
+      if (url.pathname.startsWith("/api/customers/") && request.method === "GET") {
+        const bot_name = decodeURIComponent(url.pathname.split("/").pop());
+        const { results } = await env.telegram_bot.prepare(
+          "SELECT DISTINCT user_id FROM chat_logs WHERE bot_name = ?"
+        ).bind(bot_name).all();
+        const ids = results.map(r => r.user_id);
+        return jsonResponse(ids);
+      }
+
+      // 启动消息查询
+      if (url.pathname === "/api/startmsg" && request.method === "GET") {
+        const bot_name = url.searchParams.get("bot_name");
+        const startmsg = await env.TELEGRAM_BOT_USERS.get(`startmsg_${bot_name}`, "json") || {type:"none"};
+        return jsonResponse(startmsg);
+      }
+      // 启动消息设置
+      if (url.pathname === "/api/startmsg" && request.method === "POST") {
+        const { api_pass, bot_name, type, fileUrl, caption } = await request.json();
+        if (api_pass !== env.ADMIN_PASS) return jsonResponse({ok:false,error:"未授权"},401);
+        await env.TELEGRAM_BOT_USERS.put(`startmsg_${bot_name}`, JSON.stringify({type, fileUrl, caption}));
+        return jsonResponse({ok:true});
+      }
+
+      // 群发通知
+      if (url.pathname === "/api/broadcast" && request.method === "POST") {
+        const { api_pass, bot_name, admin_id, text, fileType, fileUrl } = await request.json();
+        if (api_pass !== env.ADMIN_PASS) return jsonResponse({ok:false,error:"未授权"},401);
+        let bots = await env.TELEGRAM_BOT_USERS.get("bots", "json") || {};
+        const bot = bots[bot_name];
+        if (!bot || !bot.admins.includes(admin_id)) return jsonResponse({ok:false,error:"未授权"},401);
+
+        // 查找该bot所有聊过天的用户
+        const { results } = await env.telegram_bot.prepare(
+          "SELECT DISTINCT user_id FROM chat_logs WHERE bot_name = ?"
+        ).bind(bot_name).all();
+        const customer_ids = results.map(r => r.user_id);
+
+        let resultsArr = [];
+        for(const id of customer_ids){
+          let api = "sendMessage";
+          let data = {chat_id: id, text: text};
+          if (fileType && fileUrl) {
+            if (fileType === "photo") {
+              api = "sendPhoto";
+              data = {chat_id: id, photo: fileUrl, caption: text || ""};
+            } else if (fileType === "document") {
+              api = "sendDocument";
+              data = {chat_id: id, document: fileUrl, caption: text || ""};
+            }
+          }
+          const res = await fetch(`https://api.telegram.org/bot${bot.token}/${api}`, {
+            method:"POST",
+            headers:{"Content-Type":"application/json"},
+            body:JSON.stringify(data)
+          });
+          const result = await res.json();
+          resultsArr.push(result);
+        }
+        return jsonResponse({ok:true, results: resultsArr, count: customer_ids.length});
+      }
+
+      // 管理后台发消息/文件（单发）
+      if (url.pathname === "/api/send" && request.method === "POST") {
+        const { api_pass, bot_name, admin_id, customer_ids, text, fileType, fileUrl } = await request.json();
+        if (api_pass !== env.ADMIN_PASS) return jsonResponse({ok:false,error:"未授权"},401);
+        let bots = await env.TELEGRAM_BOT_USERS.get("bots", "json") || {};
+        const bot = bots[bot_name];
+        if (!bot || !bot.admins.includes(admin_id)) return jsonResponse({ok:false,error:"未授权"},401);
+        let results = [];
+        for(const id of customer_ids){
+          let api = "sendMessage";
+          let data = {chat_id: id, text: text};
+          if (fileType && fileUrl) {
+            if (fileType === "photo") {
+              api = "sendPhoto";
+              data = {chat_id: id, photo: fileUrl, caption: text || ""};
+            } else if (fileType === "document") {
+              api = "sendDocument";
+              data = {chat_id: id, document: fileUrl, caption: text || ""};
+            }
+          }
+          const res = await fetch(`https://api.telegram.org/bot${bot.token}/${api}`, {
+            method:"POST",
+            headers:{"Content-Type":"application/json"},
+            body:JSON.stringify(data)
+          });
+          const result = await res.json();
+          results.push(result);
+        }
+        return jsonResponse({ok:true, results});
+      }
+
+      // 关键词自动回复API
+      // 查询
+      if (url.pathname === "/api/keywords" && request.method === "GET") {
+        const bot_name = url.searchParams.get("bot_name");
+        const keywords = await env.TELEGRAM_BOT_USERS.get(`keywords_${bot_name}`, "json") || [];
+        return jsonResponse(keywords);
+      }
+      // 添加
+      if (url.pathname === "/api/keywords" && request.method === "POST") {
+        const { api_pass, bot_name, type, keyword, reply } = await request.json();
+        if (api_pass !== env.ADMIN_PASS) return jsonResponse({ok:false,error:"未授权"},401);
+        let keywords = await env.TELEGRAM_BOT_USERS.get(`keywords_${bot_name}`, "json") || [];
+        keywords.push({type, keyword, reply});
+        await env.TELEGRAM_BOT_USERS.put(`keywords_${bot_name}`, JSON.stringify(keywords));
+        return jsonResponse({ok:true});
+      }
+      // 删除
+      if (url.pathname === "/api/keywords" && request.method === "DELETE") {
+        const { api_pass, bot_name, idx } = await request.json();
+        if (api_pass !== env.ADMIN_PASS) return jsonResponse({ok:false,error:"未授权"},401);
+        let keywords = await env.TELEGRAM_BOT_USERS.get(`keywords_${bot_name}`, "json") || [];
+        keywords.splice(idx,1);
+        await env.TELEGRAM_BOT_USERS.put(`keywords_${bot_name}`, JSON.stringify(keywords));
+        return jsonResponse({ok:true});
+      }
+
+      // ========== Telegram Webhook ==========
+      if (url.pathname.startsWith("/webhook/") && request.method === "POST") {
+        const bot_name = decodeURIComponent(url.pathname.split("/").pop());
+        let bots = await env.TELEGRAM_BOT_USERS.get("bots", "json") || {};
+        const bot = bots[bot_name];
+        if (!bot) {
+          return jsonResponse({ok:false,error:"未配置该bot"},400);
+        }
+        const body = await request.json();
+        if(!body.message) {
+          return jsonResponse({ok:false,error:"非消息"},200);
+        }
+        const msg = body.message;
+        const from = msg.from;
+        const isAdmin = bot.admins.includes(from.id.toString());
+
+        // ====== 处理启动消息 /start 图片/纯文字 ======
+        if (msg.text && msg.text.trim().startsWith("/start")) {
+          let startmsg = await env.TELEGRAM_BOT_USERS.get(`startmsg_${bot_name}`, "json");
+          if (!startmsg || !startmsg.type || startmsg.type === "none" || !startmsg.fileUrl) {
+            const text = (startmsg && startmsg.caption) ? startmsg.caption : "欢迎使用本机器人！";
+            await fetch(`https://api.telegram.org/bot${bot.token}/sendMessage`, {
+              method: "POST",
+              headers: {"Content-Type": "application/json"},
+              body: JSON.stringify({
+                chat_id: msg.chat.id,
+                text
+              })
+            });
+            return new Response("ok");
+          }
+          // 图片
+          if (startmsg.type === "photo" && startmsg.fileUrl) {
+            await fetch(`https://api.telegram.org/bot${bot.token}/sendPhoto`, {
+              method: "POST",
+              headers: {"Content-Type": "application/json"},
+              body: JSON.stringify({
+                chat_id: msg.chat.id,
+                photo: startmsg.fileUrl,
+                caption: startmsg.caption || ""
+              })
+            });
+            return new Response("ok");
+          }
+          return new Response("ok");
+        }
+
+        // ====== 关键词自动回复，管理员也收到提醒 ======
+        let keywords = [];
+        try {
+          let kdata = await env.TELEGRAM_BOT_USERS.get(`keywords_${bot_name}`, "json");
+          if (kdata && Array.isArray(kdata)) keywords = kdata;
+        } catch(e){}
+        let matched = keywords.find(item =>
+          item.type==="equal" && msg.text && msg.text.trim() === item.keyword.trim()
+        );
+        if (!matched) {
+          matched = keywords.find(item =>
+            item.type==="contain" && msg.text && msg.text.includes(item.keyword)
+          );
+        }
+        if (matched) {
+          // 1. 自动回复给客户
+          await fetch(`https://api.telegram.org/bot${bot.token}/sendMessage`, {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({
+              chat_id: msg.chat.id,
+              text: matched.reply
+            })
+          });
+          // 2. 通知所有管理员（带#id，支持回复转发）
+          const showName = msg.from.username ? `@${msg.from.username}` : (msg.from.first_name || "") + (msg.from.last_name || "");
+          for (const admin_id of bot.admins) {
+            await fetch(`https://api.telegram.org/bot${bot.token}/sendMessage`, {
+              method: "POST",
+              headers: {"Content-Type": "application/json"},
+              body: JSON.stringify({
+                chat_id: admin_id,
+                text: `【关键词自动回复提醒】\n来自：${showName} [${msg.from.id}]\n消息内容：${msg.text}\n触发关键词：${matched.keyword}\n自动回复：${matched.reply}\n#id${msg.from.id}`
+              })
+            });
+          }
+          // 命中关键词回复后直接return，不再走后续客服逻辑
+          return new Response("ok");
+        }
+
+        // ========== 客户消息转发给所有管理员 ==========
+        if (!isAdmin) {
+          // 记录客户ID
+          await env.telegram_bot.prepare(
+            "INSERT OR IGNORE INTO chat_logs (bot_name, user_id) VALUES (?,?)"
+          ).bind(bot_name, from.id).run();
+
+          const showName = from.username ? `@${from.username}` : (from.first_name || "") + (from.last_name || "");
+          const admin_caption = `👆 ${showName} [${from.id}] 发送的消息 #id${from.id}\n👉 回复此消息即可回复用户`;
+
+          for (const admin_id of bot.admins) {
+            if (msg.photo) {
+              const photoFileId = msg.photo[msg.photo.length-1].file_id;
+              await fetch(`https://api.telegram.org/bot${bot.token}/sendPhoto`, {
+                method: "POST",
+                headers: {"Content-Type": "application/json"},
+                body: JSON.stringify({
+                  chat_id: admin_id,
+                  photo: photoFileId,
+                  caption: admin_caption + (msg.caption ? ("\n" + msg.caption) : "")
+                })
+              });
+            } else if (msg.document) {
+              await fetch(`https://api.telegram.org/bot${bot.token}/sendDocument`, {
+                method: "POST",
+                headers: {"Content-Type": "application/json"},
+                body: JSON.stringify({
+                  chat_id: admin_id,
+                  document: msg.document.file_id,
+                  caption: admin_caption + (msg.caption ? ("\n" + msg.caption) : "")
+                })
+              });
+            } else if (msg.text) {
+              await fetch(`https://api.telegram.org/bot${bot.token}/sendMessage`, {
+                method: "POST",
+                headers: {"Content-Type": "application/json"},
+                body: JSON.stringify({
+                  chat_id: admin_id,
+                  text: admin_caption + "\n" + msg.text
+                })
+              });
+            } else {
+              // 其它类型，兜底
+              await fetch(`https://api.telegram.org/bot${bot.token}/sendMessage`, {
+                method: "POST",
+                headers: {"Content-Type": "application/json"},
+                body: JSON.stringify({
+                  chat_id: admin_id,
+                  text: admin_caption + "\n[收到未知类型消息]"
+                })
+              });
+            }
+          }
+        }
+
+        // ========== 管理员回复（转发给客户） ==========
+        else {
+          // 只处理“回复某条消息”情景
+          let foundId = null;
+          if (msg.reply_to_message && msg.reply_to_message.caption) {
+            // 优先从caption中找 #id
+            const m = msg.reply_to_message.caption.match(/#id(\d+)/);
+            if (m) foundId = m[1];
+          }
+          if (!foundId && msg.reply_to_message && msg.reply_to_message.text) {
+            const m = msg.reply_to_message.text.match(/#id(\d+)/);
+            if (m) foundId = m[1];
+          }
+          if (foundId) {
+            const target_id = foundId;
+            // 支持多种类型
+            if (msg.text) {
+              await fetch(`https://api.telegram.org/bot${bot.token}/sendMessage`, {
+                method: "POST",
+                headers: {"Content-Type": "application/json"},
+                body: JSON.stringify({chat_id: target_id, text: msg.text})
+              });
+            }
+            if (msg.photo) {
+              await fetch(`https://api.telegram.org/bot${bot.token}/sendPhoto`, {
+                method: "POST",
+                headers: {"Content-Type": "application/json"},
+                body: JSON.stringify({chat_id: target_id, photo: msg.photo[msg.photo.length-1].file_id, caption: msg.caption || ""})
+              });
+            }
+            if (msg.document) {
+              await fetch(`https://api.telegram.org/bot${bot.token}/sendDocument`, {
+                method: "POST",
+                headers: {"Content-Type": "application/json"},
+                body: JSON.stringify({chat_id: target_id, document: msg.document.file_id, caption: msg.caption || ""})
+              });
+            }
+          }
+        }
+
+        return new Response("ok");
+      }
+
+      return jsonResponse("Not found",404);
+
+    } catch(e) {
+      // 全局异常捕获
+      console.log("Global error:", e && e.stack ? e.stack : e);
+      return jsonResponse({ok:false,error:e && e.message ? e.message : (""+e)}, 500);
+    }
+  }
+}
