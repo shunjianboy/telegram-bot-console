@@ -1,382 +1,503 @@
-<!DOCTYPE html>
-<html lang="zh">
-<head>
-  <meta charset="UTF-8">
-  <title>Telegram Bot 多Bot管理后台</title>
-  <style>
-    body { font-family: Arial, sans-serif; margin: 2em; }
-    input, button, textarea { padding: .5em; margin: .5em 0; }
-    .log { margin-top: 2em; }
-    textarea { width: 100%; min-height: 50px; }
-    #loginBox { margin-bottom: 2em; }
-    #modal { display:none; position:fixed; left:0; top:0; width:100vw; height:100vh; z-index:999; background:rgba(0,0,0,0.4); align-items:center; justify-content:center;}
-    #modal .content { background:#fff; padding:2em 3em; border-radius: 8px; }
-    .chat-id-mask { font-family:monospace; font-size:0.95em; color:#555; }
-    .section { margin-bottom:2em; border-bottom:1px solid #eee; }
-    .bot-list { margin: 0.5em 0; }
-    .bot-list-item { margin-bottom: 0.3em; }
-    .delete-btn { color: #fff; background: #e74c3c; border: none; padding: 0.2em 0.7em; border-radius: 3px; margin-left: 1em; cursor:pointer;}
-  </style>
-</head>
-<body>
-  <div id="loginBox">
-    <h2>后台登录</h2>
-    <input type="password" id="adminPwd" placeholder="请输入后台密码">
-    <button onclick="login()">登录</button>
-  </div>
-  <div id="mainBox" style="display:none;">
-    <h1>Telegram Bot 多Bot管理后台</h1>
-    <div class="section">
-      <h2>Bot配置</h2>
-      <form id="botForm">
-        <label>Bot名称(用户名): <input type="text" id="bot_name" required placeholder="如 mytest_bot"></label><br>
-        <label>Bot Token: <input type="text" id="bot_token" required></label><br>
-        <label>管理员ID(多个用英文逗号分隔): <input type="text" id="admin_ids" required></label><br>
-        <button type="submit">添加/更新Bot</button>
-      </form>
-      <button onclick="loadBots()">刷新Bot列表</button>
-      <div id="botsDiv" class="bot-list"></div>
-    </div>
-    <div class="section">
-      <h2>客户ID列表</h2>
-      <select id="botSelect" onchange="loadCustomers()"></select>
-      <button onclick="loadCustomers()">刷新客户ID</button>
-      <div id="customersDiv"></div>
-    </div>
-    <div class="section">
-      <h2>发送消息（单发）</h2>
-      <form id="sendForm">
-        <label>选择Bot: <select id="sendBotSelect"></select></label><br>
-        <label>管理员ID: <input type="text" id="sendAdminId" required></label><br>
-        <label>客户ID(可多选,用逗号分隔): <input type="text" id="sendCustomerIds" required></label><br>
-        <label>内容: <textarea id="sendMsg"></textarea></label><br>
-        <label>上传文件:
-          <input type="file" id="sendFile">
-          <select id="fileType">
-            <option value="">请选择类型</option>
-            <option value="photo">图片</option>
-            <option value="document">普通文件</option>
-          </select>
-        </label><br>
-        <button type="submit">发送</button>
-      </form>
-    </div>
-    <div class="section">
-      <h2>群发通知</h2>
-      <form id="broadcastForm">
-        <label>选择Bot: <select id="broadcastBotSelect"></select></label><br>
-        <label>管理员ID: <input type="text" id="broadcastAdminId" required></label><br>
-        <label>内容: <textarea id="broadcastMsg"></textarea></label><br>
-        <label>上传文件:
-          <input type="file" id="broadcastFile">
-          <select id="broadcastFileType">
-            <option value="">请选择类型</option>
-            <option value="photo">图片</option>
-            <option value="document">普通文件</option>
-          </select>
-        </label><br>
-        <button type="submit">群发</button>
-      </form>
-    </div>
-    <div class="section">
-      <h2>关键词自动回复</h2>
-      <label>选择Bot:
-        <select id="kwBotSelect"></select>
-      </label>
-      <button onclick="loadKeywords()">刷新</button>
-      <form id="kwForm">
-        <select id="kwType">
-          <option value="equal">精准匹配</option>
-          <option value="contain">模糊匹配</option>
-        </select>
-        <input type="text" id="kwKey" placeholder="关键词">
-        <input type="text" id="kwReply" placeholder="回复内容">
-        <button type="submit">添加关键词</button>
-      </form>
-      <div id="kwList"></div>
-    </div>
-    <div class="section">
-      <h2>启动消息设置</h2>
-      <label>选择Bot:
-        <select id="startMsgBotSelect"></select>
-      </label>
-      <form id="startMsgForm">
-        <select id="startMsgType">
-          <option value="none">纯文字</option>
-          <option value="photo">图片</option>
-        </select>
-        <label id="photoUrlLabel" style="display:inline;">
-          图片链接（上传到 <a href="https://image.a5fe.com/" target="_blank">图床</a> 后粘贴链接）:
-          <input type="text" id="startMsgPhotoUrl" placeholder="https://image.a5fe.com/xxx.jpg">
-        </label>
-        <textarea id="startMsgText" placeholder="请输入启动欢迎语"></textarea>
-        <button type="submit">保存</button>
-      </form>
-    </div>
-  </div>
-  <div id="modal">
-    <div class="content" id="modalContent"></div>
-  </div>
-  <script>
-    // 配置
-    const workerApiBase = "https://telegram-bot-api.shunjianboy-e0e.workers.dev/api";
-    let api_pass = localStorage.getItem('adminApiPass') || "";
+export default {
+  async fetch(request, env, ctx) {
+    const url = new URL(request.url);
 
-    function showMain() {
-      document.getElementById('loginBox').style.display = 'none';
-      document.getElementById('mainBox').style.display = '';
-      loadBots();
+    function jsonResponse(body, status = 200) {
+      return new Response(
+        typeof body === "string" ? body : JSON.stringify(body),
+        {
+          status,
+          headers: {
+            "Content-Type": "application/json",
+            "Access-Control-Allow-Origin": "*"
+          }
+        }
+      );
     }
-    function showLogin() {
-      document.getElementById('loginBox').style.display = '';
-      document.getElementById('mainBox').style.display = 'none';
-    }
-    async function login() {
-      const pwd = document.getElementById('adminPwd').value;
-      if(!pwd) return showModal('请输入密码');
-      const res = await fetch(workerApiBase + "/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ password: pwd })
+
+    if (request.method === "OPTIONS") {
+      return new Response(null, {
+        status: 204,
+        headers: {
+          "Access-Control-Allow-Origin": "*",
+          "Access-Control-Allow-Methods": "GET,POST,DELETE,OPTIONS",
+          "Access-Control-Allow-Headers": "Content-Type,Authorization",
+        },
       });
-      const data = await res.json();
-      if(data.ok) {
-        localStorage.setItem('adminApiPass', pwd);
-        api_pass = pwd;
-        showMain();
-      } else {
-        showModal('密码错误');
-      }
-    }
-    function showModal(msg) {
-      document.getElementById('modalContent').innerText = msg;
-      document.getElementById('modal').style.display = 'flex';
-    }
-    document.getElementById('modal').onclick = function(){this.style.display='none'};
-
-    let botsCache = {};
-    async function loadBots() {
-      const res = await fetch(workerApiBase + "/bots");
-      const bots = await res.json();
-      botsCache = bots;
-      let html = '<ul>';
-      for(const k in bots){
-        html += `<li class="bot-list-item"><b>${k}</b> Token: ${bots[k].token.slice(0,8)}... 管理员: ${bots[k].admins.join(",")}
-         <button class="delete-btn" onclick="deleteBot('${k}')">删除</button></li>`;
-      }
-      html += '</ul>';
-      document.getElementById('botsDiv').innerHTML = html;
-      let options = '';
-      for(const k in bots) options += `<option value="${k}">${k}</option>`;
-      document.getElementById('botSelect').innerHTML = options;
-      document.getElementById('sendBotSelect').innerHTML = options;
-      document.getElementById('broadcastBotSelect').innerHTML = options;
-      document.getElementById('kwBotSelect').innerHTML = options;
-      document.getElementById('startMsgBotSelect').innerHTML = options;
-      loadStartMsg();
-    }
-    async function deleteBot(bot_name) {
-      if(!confirm('确定要删除Bot：'+bot_name+'？')) return;
-      const res = await fetch(workerApiBase + "/bots", {
-        method:"DELETE",
-        headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({api_pass,bot_name})
-      });
-      const d = await res.json();
-      if(d.ok) {
-        showModal('Bot已删除!');
-        loadBots();
-      } else {
-        showModal('删除失败:'+d.error);
-      }
-    }
-    document.getElementById('botForm').onsubmit = async (e)=>{
-      e.preventDefault();
-      const bot_name = document.getElementById('bot_name').value;
-      const token = document.getElementById('bot_token').value;
-      const admins = document.getElementById('admin_ids').value.split(",").map(v=>v.trim()).filter(Boolean);
-      const res = await fetch(workerApiBase + "/bots", {
-        method:"POST",
-        headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({api_pass,bot_name,token,admins})
-      });
-      const d = await res.json();
-      if(d.ok) {
-        showModal('Bot配置成功!');
-        loadBots();
-      } else {
-        showModal('配置失败:'+d.error);
-      }
-    };
-
-    async function loadCustomers() {
-      const bot_name = document.getElementById('botSelect').value;
-      const res = await fetch(workerApiBase + `/customers/${encodeURIComponent(bot_name)}`);
-      const list = await res.json();
-      let html = '<ul>';
-      for(const id of list){
-        html += `<li>${id} <button onclick="document.getElementById('sendCustomerIds').value='${id}';">填入</button></li>`;
-      }
-      html += '</ul>';
-      document.getElementById('customersDiv').innerHTML = html;
     }
 
-    document.getElementById('sendForm').onsubmit = async (e)=>{
-      e.preventDefault();
-      const bot_name = document.getElementById('sendBotSelect').value;
-      const admin_id = document.getElementById('sendAdminId').value.trim();
-      const customer_ids = document.getElementById('sendCustomerIds').value.split(",").map(v=>v.trim()).filter(Boolean);
-      const text = document.getElementById('sendMsg').value;
-      const fileInput = document.getElementById('sendFile');
-      const fileType = document.getElementById('fileType').value;
-      let fileUrl = "";
-      const botsRes = await fetch(workerApiBase + "/bots");
-      const bots = await botsRes.json();
-      const botToken = bots[bot_name].token;
+    try {
+      // 登录
+      if (url.pathname === "/api/login" && request.method === "POST") {
+        const { password } = await request.json();
+        if (password && password === env.ADMIN_PASS) {
+          return jsonResponse({ ok: true });
+        }
+        return jsonResponse({ ok: false, error: "密码错误" }, 401);
+      }
 
-      if(fileInput.files.length && fileType){
-        // 这里依然调用Telegram上传接口（sendPhoto/sendDocument）
-        const form = new FormData();
-        if(fileType === "photo") form.append("photo", fileInput.files[0]);
-        else form.append("document", fileInput.files[0]);
-        form.append("chat_id", admin_id);
-        const resUpload = await fetch(`https://api.telegram.org/bot${botToken}/${fileType === "photo" ? "sendPhoto" : "sendDocument"}`, {method:"POST", body: form});
-        const data = await resUpload.json();
-        if(fileType === "photo" && data && data.result) fileUrl = data.result.photo[data.result.photo.length-1].file_id;
-        if(fileType === "document" && data && data.result) fileUrl = data.result.document.file_id;
-        if(!fileUrl) {
-          showModal('文件上传失败');
-          return;
+      // 获取所有Bot配置
+      if (url.pathname === "/api/bots" && request.method === "GET") {
+        const bots = await env.TELEGRAM_BOT_USERS.get("bots", "json") || {};
+        return jsonResponse(bots);
+      }
+      // 新增/更新Bot配置 + 自动设置Webhook
+      if (url.pathname === "/api/bots" && request.method === "POST") {
+        const { api_pass, bot_name, token, admins } = await request.json();
+        if (api_pass !== env.ADMIN_PASS) return jsonResponse({ok:false,error:"未授权"},401);
+        let bots = await env.TELEGRAM_BOT_USERS.get("bots", "json") || {};
+        bots[bot_name] = { token, admins };
+        await env.TELEGRAM_BOT_USERS.put("bots", JSON.stringify(bots));
+        // 自动设置Webhook
+        try {
+          const webhookUrl = `https://${url.hostname}/webhook/${bot_name}`;
+          const r = await fetch(`https://api.telegram.org/bot${token}/setWebhook?url=${encodeURIComponent(webhookUrl)}`);
+          const setWebhookResult = await r.json();
+          if (!setWebhookResult.ok) {
+            return jsonResponse({ok:true, warning: "Bot已添加，但设置Webhook失败："+setWebhookResult.description});
+          }
+        } catch(e) {}
+        return jsonResponse({ok:true});
+      }
+      // 删除Bot配置
+      if (url.pathname === "/api/bots" && request.method === "DELETE") {
+        const { api_pass, bot_name } = await request.json();
+        if (api_pass !== env.ADMIN_PASS) return jsonResponse({ok:false,error:"未授权"},401);
+        
+        try {
+          let bots = await env.TELEGRAM_BOT_USERS.get("bots", "json") || {};
+          if (bots[bot_name]) {
+            delete bots[bot_name];
+            await env.TELEGRAM_BOT_USERS.put("bots", JSON.stringify(bots));
+            return jsonResponse({ok:true});
+          } else {
+            return jsonResponse({ok:false,error:"未找到Bot"},404);
+          }
+        } catch (error) {
+          console.error("删除Bot错误:", error);
+          return jsonResponse({ok:false,error:"删除Bot失败: " + error.message}, 500);
         }
       }
 
-      const res = await fetch(workerApiBase + "/send", {
-        method:"POST",
-        headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({api_pass,bot_name,admin_id,customer_ids,text,fileType,fileUrl})
-      });
-      const d = await res.json();
-      if(d.ok) showModal('消息已发送!');
-      else showModal('发送失败:'+(d.error||JSON.stringify(d)));
-    };
+      // 获取客户ID列表
+      if (url.pathname.startsWith("/api/customers/") && request.method === "GET") {
+        const bot_name = decodeURIComponent(url.pathname.split("/").pop());
+        const { results } = await env.telegram_bot.prepare(
+          "SELECT DISTINCT user_id FROM chat_logs WHERE bot_name = ?"
+        ).bind(bot_name).all();
+        const ids = results.map(r => r.user_id);
+        return jsonResponse(ids);
+      }
 
-    // 群发通知
-    document.getElementById('broadcastForm').onsubmit = async (e)=>{
-      e.preventDefault();
-      const bot_name = document.getElementById('broadcastBotSelect').value;
-      const admin_id = document.getElementById('broadcastAdminId').value.trim();
-      const text = document.getElementById('broadcastMsg').value;
-      const fileInput = document.getElementById('broadcastFile');
-      const fileType = document.getElementById('broadcastFileType').value;
-      let fileUrl = "";
-      const botsRes = await fetch(workerApiBase + "/bots");
-      const bots = await botsRes.json();
-      const botToken = bots[bot_name].token;
+      // 启动消息查询
+      if (url.pathname === "/api/startmsg" && request.method === "GET") {
+        const bot_name = url.searchParams.get("bot_name");
+        const startmsg = await env.TELEGRAM_BOT_USERS.get(`startmsg_${bot_name}`, "json") || {type:"none"};
+        return jsonResponse(startmsg);
+      }
+      // 启动消息设置
+      if (url.pathname === "/api/startmsg" && request.method === "POST") {
+        const { api_pass, bot_name, type, fileUrl, caption } = await request.json();
+        if (api_pass !== env.ADMIN_PASS) return jsonResponse({ok:false,error:"未授权"},401);
+        await env.TELEGRAM_BOT_USERS.put(`startmsg_${bot_name}`, JSON.stringify({type, fileUrl, caption}));
+        return jsonResponse({ok:true});
+      }
 
-      if(fileInput.files.length && fileType){
-        const form = new FormData();
-        if(fileType === "photo") form.append("photo", fileInput.files[0]);
-        else form.append("document", fileInput.files[0]);
-        form.append("chat_id", admin_id);
-        const resUpload = await fetch(`https://api.telegram.org/bot${botToken}/${fileType === "photo" ? "sendPhoto" : "sendDocument"}`, {method:"POST", body: form});
-        const data = await resUpload.json();
-        if(fileType === "photo" && data && data.result) fileUrl = data.result.photo[data.result.photo.length-1].file_id;
-        if(fileType === "document" && data && data.result) fileUrl = data.result.document.file_id;
-        if(!fileUrl) {
-          showModal('文件上传失败');
-          return;
+      // 群发通知
+      if (url.pathname === "/api/broadcast" && request.method === "POST") {
+        const { api_pass, bot_name, admin_id, text, fileType, fileUrl } = await request.json();
+        if (api_pass !== env.ADMIN_PASS) return jsonResponse({ok:false,error:"未授权"},401);
+        let bots = await env.TELEGRAM_BOT_USERS.get("bots", "json") || {};
+        const bot = bots[bot_name];
+        if (!bot || !bot.admins.includes(admin_id)) return jsonResponse({ok:false,error:"未授权"},401);
+
+        // 查找该bot所有聊过天的用户
+        const { results } = await env.telegram_bot.prepare(
+          "SELECT DISTINCT user_id FROM chat_logs WHERE bot_name = ?"
+        ).bind(bot_name).all();
+        const customer_ids = results.map(r => r.user_id);
+
+        let resultsArr = [];
+        let warnArr = [];
+        let failedUserIds = []; // 记录失败的用户ID
+        
+        for(const id of customer_ids){
+          let api = "sendMessage";
+          let data = {chat_id: id, text: text};
+          if (fileType && fileUrl) {
+            if (fileType === "photo") {
+              api = "sendPhoto";
+              data = {chat_id: id, photo: fileUrl, caption: text || ""};
+            } else if (fileType === "document") {
+              api = "sendDocument";
+              data = {chat_id: id, document: fileUrl, caption: text || ""};
+            }
+          }
+          const res = await fetch(`https://api.telegram.org/bot${bot.token}/${api}`, {
+            method:"POST",
+            headers:{"Content-Type":"application/json"},
+            body:JSON.stringify(data)
+          });
+          const result = await res.json();
+          resultsArr.push(result);
+          
+          // 检查失败原因
+          if (!result.ok && result.description) {
+            if (
+              result.description.includes("bot was blocked by the user") ||
+              result.description.includes("user is deactivated") ||
+              result.description.includes("chat not found")
+            ) {
+              const warningMsg = `⚠️ 用户 ${id} 未收到消息：用户已删除机器人或删除了账户`;
+              warnArr.push(warningMsg);
+              failedUserIds.push(id);
+            }
+          }
         }
+        
+        // 如果有失败的发送，立即给发送这条广播的管理员发送警告通知
+        if (warnArr.length > 0) {
+          await fetch(`https://api.telegram.org/bot${bot.token}/sendMessage`, {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({
+              chat_id: admin_id,
+              text: `⚠️ 系统警告 ⚠️\n\n${warnArr.join('\n')}\n\n这些用户可能已停用或删除了机器人，无法接收消息。`
+            })
+          });
+        }
+        
+        return jsonResponse({ok:true, results: resultsArr, count: customer_ids.length, warnings: warnArr, failedUsers: failedUserIds});
       }
 
-      const res = await fetch(workerApiBase + "/broadcast", {
-        method:"POST",
-        headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({api_pass,bot_name,admin_id,text,fileType,fileUrl})
-      });
-      const d = await res.json();
-      if(d.ok) showModal('群发成功！本次发送：'+d.count+'人');
-      else showModal('群发失败:'+(d.error||JSON.stringify(d)));
-    };
-
-    // 关键词自动回复
-    async function loadKeywords() {
-      const bot_name = document.getElementById('kwBotSelect').value;
-      const res = await fetch(workerApiBase + `/keywords?bot_name=${encodeURIComponent(bot_name)}`);
-      const keywords = await res.json();
-      let html = '<ul>';
-      for(const [i, kw] of keywords.entries()) {
-        html += `<li>[${kw.type==='equal'?'精准':'模糊'}] <b>${kw.keyword}</b> → ${kw.reply}
-          <button onclick="deleteKeyword(${i})">删除</button></li>`;
+      // 管理后台发消息/文件（单发）
+      if (url.pathname === "/api/send" && request.method === "POST") {
+        const { api_pass, bot_name, admin_id, customer_ids, text, fileType, fileUrl } = await request.json();
+        if (api_pass !== env.ADMIN_PASS) return jsonResponse({ok:false,error:"未授权"},401);
+        let bots = await env.TELEGRAM_BOT_USERS.get("bots", "json") || {};
+        const bot = bots[bot_name];
+        if (!bot || !bot.admins.includes(admin_id)) return jsonResponse({ok:false,error:"未授权"},401);
+        let results = [];
+        let warnArr = [];
+        let failedUserIds = []; // 记录失败的用户ID
+        
+        for(const id of customer_ids){
+          let api = "sendMessage";
+          let data = {chat_id: id, text: text};
+          if (fileType && fileUrl) {
+            if (fileType === "photo") {
+              api = "sendPhoto";
+              data = {chat_id: id, photo: fileUrl, caption: text || ""};
+            } else if (fileType === "document") {
+              api = "sendDocument";
+              data = {chat_id: id, document: fileUrl, caption: text || ""};
+            }
+          }
+          const res = await fetch(`https://api.telegram.org/bot${bot.token}/${api}`, {
+            method:"POST",
+            headers:{"Content-Type":"application/json"},
+            body:JSON.stringify(data)
+          });
+          const result = await res.json();
+          results.push(result);
+          
+          // 检查失败原因
+          if (!result.ok && result.description) {
+            if (
+              result.description.includes("bot was blocked by the user") ||
+              result.description.includes("user is deactivated") ||
+              result.description.includes("chat not found")
+            ) {
+              const warningMsg = `⚠️ 用户 ${id} 未收到消息：用户已删除机器人或删除了账户`;
+              warnArr.push(warningMsg);
+              failedUserIds.push(id);
+            }
+          }
+        }
+        
+        // 如果有失败的发送，立即给发送这条消息的管理员发送警告通知
+        if (warnArr.length > 0) {
+          await fetch(`https://api.telegram.org/bot${bot.token}/sendMessage`, {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({
+              chat_id: admin_id,
+              text: `⚠️ 系统警告 ⚠️\n\n${warnArr.join('\n')}\n\n这些用户可能已停用或删除了机器人，无法接收消息。`
+            })
+          });
+        }
+        
+        return jsonResponse({ok:true, results, warnings: warnArr, failedUsers: failedUserIds});
       }
-      html += '</ul>';
-      document.getElementById('kwList').innerHTML = html;
-    }
-    document.getElementById('kwForm').onsubmit = async (e)=>{
-      e.preventDefault();
-      const bot_name = document.getElementById('kwBotSelect').value;
-      const type = document.getElementById('kwType').value;
-      const keyword = document.getElementById('kwKey').value.trim();
-      const reply = document.getElementById('kwReply').value.trim();
-      if(!keyword||!reply) return showModal('关键词和回复内容必填');
-      const res = await fetch(workerApiBase + "/keywords", {
-        method:"POST",
-        headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({api_pass,bot_name,type,keyword,reply})
-      });
-      const d = await res.json();
-      if(d.ok) {
-        showModal('添加成功');
-        loadKeywords();
-      } else {
-        showModal('添加失败:'+d.error);
-      }
-    };
-    async function deleteKeyword(idx) {
-      const bot_name = document.getElementById('kwBotSelect').value;
-      if(!confirm('确定删除该关键词？')) return;
-      await fetch(workerApiBase + "/keywords", {
-        method:"DELETE",
-        headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({api_pass,bot_name,idx})
-      });
-      loadKeywords();
-    }
 
-    // 启动消息管理
-    async function loadStartMsg() {
-      const bot_name = document.getElementById('startMsgBotSelect').value;
-      if(!bot_name) return;
-      const res = await fetch(workerApiBase + `/startmsg?bot_name=${encodeURIComponent(bot_name)}`);
-      const d = await res.json();
-      document.getElementById('startMsgType').value = d.type || "none";
-      document.getElementById('startMsgPhotoUrl').value = d.fileUrl || "";
-      document.getElementById('startMsgText').value = d.caption || "";
-    }
-    document.getElementById('startMsgBotSelect').onchange = loadStartMsg;
-    document.getElementById('startMsgForm').onsubmit = async (e)=>{
-      e.preventDefault();
-      const bot_name = document.getElementById('startMsgBotSelect').value;
-      const type = document.getElementById('startMsgType').value;
-      const caption = document.getElementById('startMsgText').value;
-      const fileUrl = document.getElementById('startMsgPhotoUrl').value.trim();
-      if(type === "photo" && !fileUrl) {
-        showModal('请粘贴经过图床上传后的图片链接');
-        return;
+      // 关键词自动回复API
+      // 查询
+      if (url.pathname === "/api/keywords" && request.method === "GET") {
+        const bot_name = url.searchParams.get("bot_name");
+        const keywords = await env.TELEGRAM_BOT_USERS.get(`keywords_${bot_name}`, "json") || [];
+        return jsonResponse(keywords);
       }
-      const res = await fetch(workerApiBase + "/startmsg", {
-        method:"POST",
-        headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({api_pass,bot_name,type,fileUrl,caption})
-      });
-      const d = await res.json();
-      if(d.ok) showModal('启动消息已保存');
-      else showModal('保存失败:'+d.error);
-    };
+      // 添加
+      if (url.pathname === "/api/keywords" && request.method === "POST") {
+        const { api_pass, bot_name, type, keyword, reply } = await request.json();
+        if (api_pass !== env.ADMIN_PASS) return jsonResponse({ok:false,error:"未授权"},401);
+        let keywords = await env.TELEGRAM_BOT_USERS.get(`keywords_${bot_name}`, "json") || [];
+        keywords.push({type, keyword, reply});
+        await env.TELEGRAM_BOT_USERS.put(`keywords_${bot_name}`, JSON.stringify(keywords));
+        return jsonResponse({ok:true});
+      }
+      // 删除
+      if (url.pathname === "/api/keywords" && request.method === "DELETE") {
+        const { api_pass, bot_name, idx } = await request.json();
+        if (api_pass !== env.ADMIN_PASS) return jsonResponse({ok:false,error:"未授权"},401);
+        let keywords = await env.TELEGRAM_BOT_USERS.get(`keywords_${bot_name}`, "json") || [];
+        keywords.splice(idx,1);
+        await env.TELEGRAM_BOT_USERS.put(`keywords_${bot_name}`, JSON.stringify(keywords));
+        return jsonResponse({ok:true});
+      }
 
-    window.onload = function(){
-      if(api_pass) showMain();
-      else showLogin();
+      // ========== Telegram Webhook ==========
+      if (url.pathname.startsWith("/webhook/") && request.method === "POST") {
+        const bot_name = decodeURIComponent(url.pathname.split("/").pop());
+        let bots = await env.TELEGRAM_BOT_USERS.get("bots", "json") || {};
+        const bot = bots[bot_name];
+        if (!bot) {
+          return jsonResponse({ok:false,error:"未配置该bot"},400);
+        }
+        const body = await request.json();
+        if(!body.message) {
+          return jsonResponse({ok:false,error:"非消息"},200);
+        }
+        const msg = body.message;
+        const from = msg.from;
+        const isAdmin = bot.admins.includes(from.id.toString());
+
+        // ====== 处理启动消息 /start 图片/纯文字 ======
+        if (msg.text && msg.text.trim().startsWith("/start")) {
+          let startmsg = await env.TELEGRAM_BOT_USERS.get(`startmsg_${bot_name}`, "json");
+          if (!startmsg || !startmsg.type || startmsg.type === "none" || !startmsg.fileUrl) {
+            const text = (startmsg && startmsg.caption) ? startmsg.caption : "欢迎使用本机器人！";
+            await fetch(`https://api.telegram.org/bot${bot.token}/sendMessage`, {
+              method: "POST",
+              headers: {"Content-Type": "application/json"},
+              body: JSON.stringify({
+                chat_id: msg.chat.id,
+                text
+              })
+            });
+            return new Response("ok");
+          }
+          // 图片
+          if (startmsg.type === "photo" && startmsg.fileUrl) {
+            await fetch(`https://api.telegram.org/bot${bot.token}/sendPhoto`, {
+              method: "POST",
+              headers: {"Content-Type": "application/json"},
+              body: JSON.stringify({
+                chat_id: msg.chat.id,
+                photo: startmsg.fileUrl,
+                caption: startmsg.caption || ""
+              })
+            });
+            return new Response("ok");
+          }
+          return new Response("ok");
+        }
+
+        // ====== 关键词自动回复，管理员也收到提醒 ======
+        let keywords = [];
+        try {
+          let kdata = await env.TELEGRAM_BOT_USERS.get(`keywords_${bot_name}`, "json");
+          if (kdata && Array.isArray(kdata)) keywords = kdata;
+        } catch(e){}
+        let matched = keywords.find(item =>
+          item.type==="equal" && msg.text && msg.text.trim() === item.keyword.trim()
+        );
+        if (!matched) {
+          matched = keywords.find(item =>
+            item.type==="contain" && msg.text && msg.text.includes(item.keyword)
+          );
+        }
+        if (matched) {
+          // 1. 自动回复给客户
+          await fetch(`https://api.telegram.org/bot${bot.token}/sendMessage`, {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({
+              chat_id: msg.chat.id,
+              text: matched.reply
+            })
+          });
+          // 2. 通知所有管理员（带#id，支持回复转发）
+          const showName = msg.from.username ? `@${msg.from.username}` : (msg.from.first_name || "") + (msg.from.last_name || "");
+          for (const admin_id of bot.admins) {
+            await fetch(`https://api.telegram.org/bot${bot.token}/sendMessage`, {
+              method: "POST",
+              headers: {"Content-Type": "application/json"},
+              body: JSON.stringify({
+                chat_id: admin_id,
+                text: `【关键词自动回复提醒】\n来自：${showName} [${msg.from.id}]\n消息内容：${msg.text}\n触发关键词：${matched.keyword}\n自动回复：${matched.reply}\n#id${msg.from.id}`
+              })
+            });
+          }
+          // 命中关键词回复后直接return，不再走后续客服逻辑
+          return new Response("ok");
+        }
+
+        // ========== 客户消息转发给所有管理员 ==========
+        if (!isAdmin) {
+          // 记录客户ID
+          await env.telegram_bot.prepare(
+            "INSERT OR IGNORE INTO chat_logs (bot_name, user_id) VALUES (?,?)"
+          ).bind(bot_name, from.id).run();
+
+          const showName = msg.from.username ? `@${msg.from.username}` : (msg.from.first_name || "") + (msg.from.last_name || "");
+          const admin_caption = `👆 ${showName} [${from.id}] 发送的消息 #id${from.id}\n👉 回复此消息即可回复用户`;
+
+          for (const admin_id of bot.admins) {
+            if (msg.photo) {
+              const photoFileId = msg.photo[msg.photo.length-1].file_id;
+              await fetch(`https://api.telegram.org/bot${bot.token}/sendPhoto`, {
+                method: "POST",
+                headers: {"Content-Type": "application/json"},
+                body: JSON.stringify({
+                  chat_id: admin_id,
+                  photo: photoFileId,
+                  caption: admin_caption + (msg.caption ? ("\n" + msg.caption) : "")
+                })
+              });
+            } else if (msg.document) {
+              await fetch(`https://api.telegram.org/bot${bot.token}/sendDocument`, {
+                method: "POST",
+                headers: {"Content-Type": "application/json"},
+                body: JSON.stringify({
+                  chat_id: admin_id,
+                  document: msg.document.file_id,
+                  caption: admin_caption + (msg.caption ? ("\n" + msg.caption) : "")
+                })
+              });
+            } else if (msg.text) {
+              await fetch(`https://api.telegram.org/bot${bot.token}/sendMessage`, {
+                method: "POST",
+                headers: {"Content-Type": "application/json"},
+                body: JSON.stringify({
+                  chat_id: admin_id,
+                  text: admin_caption + "\n" + msg.text
+                })
+              });
+            } else {
+              // 其它类型，兜底
+              await fetch(`https://api.telegram.org/bot${bot.token}/sendMessage`, {
+                method: "POST",
+                headers: {"Content-Type": "application/json"},
+                body: JSON.stringify({
+                  chat_id: admin_id,
+                  text: admin_caption + "\n[收到未知类型消息]"
+                })
+              });
+            }
+          }
+        }
+
+        // ========== 管理员回复（转发给客户） ==========
+        else {
+          // 只处理"回复某条消息"情景
+          let foundId = null;
+          if (msg.reply_to_message && msg.reply_to_message.caption) {
+            // 优先从caption中找 #id
+            const m = msg.reply_to_message.caption.match(/#id(\d+)/);
+            if (m) foundId = m[1];
+          }
+          if (!foundId && msg.reply_to_message && msg.reply_to_message.text) {
+            const m = msg.reply_to_message.text.match(/#id(\d+)/);
+            if (m) foundId = m[1];
+          }
+          
+          // 管理员发送了消息但没有回复任何用户消息
+          if (!msg.reply_to_message) {
+            // 提醒管理员需要回复用户消息才能回复给用户
+            await fetch(`https://api.telegram.org/bot${bot.token}/sendMessage`, {
+              method: "POST",
+              headers: {"Content-Type": "application/json"},
+              body: JSON.stringify({
+                chat_id: from.id,
+                text: "⚠️ 错误：您需要回复用户的消息才能发送回复。\n\n请找到包含用户ID的消息，点击回复后再发送您的消息。直接发送的消息不会转发给任何用户。"
+              })
+            });
+            return new Response("ok");
+          }
+          // 管理员回复了消息但没找到目标ID
+          else if (!foundId) {
+            await fetch(`https://api.telegram.org/bot${bot.token}/sendMessage`, {
+              method: "POST",
+              headers: {"Content-Type": "application/json"},
+              body: JSON.stringify({
+                chat_id: from.id,
+                text: "⚠️ 错误：无法识别回复目标用户。\n\n请确保您回复的是包含有 #id 标识的消息。"
+              })
+            });
+            return new Response("ok");
+          }
+          
+          if (foundId) {
+            const target_id = foundId;
+            let sendSuccess = false;
+            let sendErrors = [];
+            
+            // 支持多种类型
+            if (msg.text) {
+              const res = await fetch(`https://api.telegram.org/bot${bot.token}/sendMessage`, {
+                method: "POST",
+                headers: {"Content-Type": "application/json"},
+                body: JSON.stringify({chat_id: target_id, text: msg.text})
+              });
+              const result = await res.json();
+              if (result.ok) sendSuccess = true;
+              else sendErrors.push("文本消息发送失败: " + (result.description || "未知错误"));
+            }
+            if (msg.photo) {
+              const res = await fetch(`https://api.telegram.org/bot${bot.token}/sendPhoto`, {
+                method: "POST",
+                headers: {"Content-Type": "application/json"},
+                body: JSON.stringify({chat_id: target_id, photo: msg.photo[msg.photo.length-1].file_id, caption: msg.caption || ""})
+              });
+              const result = await res.json();
+              if (result.ok) sendSuccess = true;
+              else sendErrors.push("图片消息发送失败: " + (result.description || "未知错误"));
+            }
+            if (msg.document) {
+              const res = await fetch(`https://api.telegram.org/bot${bot.token}/sendDocument`, {
+                method: "POST",
+                headers: {"Content-Type": "application/json"},
+                body: JSON.stringify({chat_id: target_id, document: msg.document.file_id, caption: msg.caption || ""})
+              });
+              const result = await res.json();
+              if (result.ok) sendSuccess = true;
+              else sendErrors.push("文件消息发送失败: " + (result.description || "未知错误"));
+            }
+            
+            // 检查消息是否成功发送，如果失败，通知管理员
+            if (!sendSuccess) {
+              await fetch(`https://api.telegram.org/bot${bot.token}/sendMessage`, {
+                method: "POST",
+                headers: {"Content-Type": "application/json"},
+                body: JSON.stringify({
+                  chat_id: from.id,
+                  text: `⚠️ 消息发送失败 ⚠️\n\n用户 ${target_id} 可能已删除机器人或删除了账户。\n\n错误详情：${sendErrors.join("\n")}`
+                })
+              });
+            }
+          }
+        }
+
+        return new Response("ok");
+      }
+
+      return jsonResponse("Not found",404);
+
+    } catch(e) {
+      // 全局异常捕获
+      console.log("Global error:", e && e.stack ? e.stack : e);
+      return jsonResponse({ok:false,error:e && e.message ? e.message : (""+e)}, 500);
     }
-  </script>
-</body>
-</html>
+  }
+}
