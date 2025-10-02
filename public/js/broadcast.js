@@ -1,84 +1,120 @@
+// broadcast.js - 群发消息功能
 document.addEventListener('DOMContentLoaded', function() {
-    // 群发消息相关功能
     const broadcastForm = document.getElementById('broadcastForm');
     const broadcastBotSelect = document.getElementById('broadcastBotSelect');
-    const messageTypeRadios = document.querySelectorAll('input[name="messageType"]');
-    const fileUrlContainer = document.getElementById('fileUrlContainer');
     const broadcastError = document.getElementById('broadcastError');
     const broadcastSuccess = document.getElementById('broadcastSuccess');
+    const textType = document.getElementById('textType');
+    const photoType = document.getElementById('photoType');
+    const fileType = document.getElementById('fileType');
+    const fileUrlContainer = document.getElementById('fileUrlContainer');
     
-    // 消息类型切换时显示/隐藏文件URL输入框
-    if (messageTypeRadios) {
-        messageTypeRadios.forEach(radio => {
-            radio.addEventListener('change', function() {
-                if (this.value === 'text') {
-                    fileUrlContainer.style.display = 'none';
-                } else {
-                    fileUrlContainer.style.display = 'block';
-                }
-            });
-        });
+    // 切换消息类型时显示/隐藏文件URL输入框
+    textType.addEventListener('change', toggleFileUrlInput);
+    photoType.addEventListener('change', toggleFileUrlInput);
+    fileType.addEventListener('change', toggleFileUrlInput);
+    
+    function toggleFileUrlInput() {
+        fileUrlContainer.style.display = textType.checked ? 'none' : 'block';
     }
     
-    // 提交群发消息表单
+    // 加载Bot选择列表
+    loadBots(broadcastBotSelect);
+    
+    // 处理群发消息表单提交
     if (broadcastForm) {
-        broadcastForm.addEventListener('submit', async function(e) {
+        broadcastForm.addEventListener('submit', function(e) {
             e.preventDefault();
             
-            const botName = broadcastBotSelect.value;
-            if (!botName) {
-                alert('请先选择一个Bot');
+            // 获取当前用户ID（从本地存储，登录时保存）
+            const currentUserId = localStorage.getItem('adminId');
+            if (!currentUserId) {
+                showError(broadcastError, '未找到管理员ID，请重新登录');
+                return;
+            }
+            
+            const selectedBot = broadcastBotSelect.value;
+            if (!selectedBot) {
+                showError(broadcastError, '请先选择一个Bot');
                 return;
             }
             
             const messageType = document.querySelector('input[name="messageType"]:checked').value;
-            const fileUrl = document.getElementById('fileUrl').value.trim();
-            const messageText = document.getElementById('messageText').value.trim();
+            const messageText = document.getElementById('messageText').value;
+            const fileUrl = document.getElementById('fileUrl').value;
             
-            // 验证
-            if (!messageText && messageType === 'text') {
-                broadcastError.textContent = '请输入消息内容';
-                broadcastError.classList.remove('d-none');
-                broadcastSuccess.classList.add('d-none');
-                return;
-            }
-            
+            // 文件类型但没有URL
             if (messageType !== 'text' && !fileUrl) {
-                broadcastError.textContent = '请输入文件/图片URL';
-                broadcastError.classList.remove('d-none');
-                broadcastSuccess.classList.add('d-none');
+                showError(broadcastError, '请输入文件/图片URL');
                 return;
             }
             
-            // 禁用提交按钮，显示加载状态
-            const submitButton = broadcastForm.querySelector('button[type="submit"]');
-            const originalButtonText = submitButton.innerHTML;
-            submitButton.disabled = true;
-            submitButton.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> 发送中...';
+            // 准备请求数据
+            const data = {
+                api_pass: localStorage.getItem('api_pass'),
+                bot_name: selectedBot,
+                admin_id: currentUserId, // 确保传递当前用户ID
+                text: messageText,
+            };
             
-            try {
-                const fileType = messageType !== 'text' ? messageType : null;
-                const response = await API.broadcastMessage(botName, messageText, fileType, fileUrl);
-                
-                broadcastError.classList.add('d-none');
-                broadcastSuccess.textContent = `群发消息已发送给 ${response.count || 0} 位用户`;
-                if (response.warnings && response.warnings.length > 0) {
-                    broadcastSuccess.textContent += `，其中 ${response.warnings.length} 位用户发送失败（可能已删除机器人）`;
-                }
-                broadcastSuccess.classList.remove('d-none');
-                
-                // 清空表单
-                document.getElementById('fileUrl').value = '';
-                document.getElementById('messageText').value = '';
-            } catch (error) {
-                broadcastSuccess.classList.add('d-none');
-                broadcastError.textContent = '群发消息失败: ' + error.message;
-                broadcastError.classList.remove('d-none');
-            } finally {
-                // 恢复提交按钮
-                submitButton.disabled = false;
-                submitButton.innerHTML = originalButtonText;
+            // 如果不是纯文本消息，添加文件信息
+            if (messageType !== 'text') {
+                data.fileType = messageType;
+                data.fileUrl = fileUrl;
             }
+            
+            // 发送请求
+            fetch(`${API_BASE}/api/broadcast`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(data)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.ok) {
+                    showSuccess(broadcastSuccess, `消息已成功发送给${data.count}位用户！`);
+                    broadcastError.classList.add('d-none');
+                    
+                    // 如果有警告信息，显示在成功消息下方
+                    if (data.warnings && data.warnings.length > 0) {
+                        const warningText = data.warnings.join('<br>');
+                        showSuccess(broadcastSuccess, `消息已发送，但有${data.warnings.length}位用户未收到：<br>${warningText}`);
+                    }
+                    
+                    // 清空表单
+                    document.getElementById('messageText').value = '';
+                    document.getElementById('fileUrl').value = '';
+                } else {
+                    // 显示更详细的错误信息
+                    let errorMsg = data.error || '发送失败';
+                    if (data.debug) {
+                        errorMsg += `<br>调试信息：提供的ID=${data.debug.providedId}，管理员列表=${data.debug.adminList.join(',')}`;
+                    }
+                    showError(broadcastError, errorMsg);
+                }
+            })
+            .catch(err => {
+                console.error('群发消息出错:', err);
+                showError(broadcastError, '网络错误，请重试');
+            });
         });
+    }
+    
+    function showError(element, message) {
+        element.innerHTML = message;
+        element.classList.remove('d-none');
+        setTimeout(() => {
+            element.classList.add('d-none');
+        }, 10000);
+    }
+    
+    function showSuccess(element, message) {
+        element.innerHTML = message;
+        element.classList.remove('d-none');
+        setTimeout(() => {
+            element.classList.add('d-none');
+        }, 5000);
     }
 });
