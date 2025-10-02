@@ -10,6 +10,21 @@ export async function onRequest(context) {
     }
   });
 
+  // ---- API密钥校验 ----
+  let apiKey = "";
+  if (method === "GET" || method === "DELETE") {
+    apiKey = url.searchParams.get("api_key");
+  } else if (method === "POST" || method === "PUT") {
+    try {
+      const body = await request.clone().json();
+      apiKey = body.api_key;
+    } catch(e){}
+  }
+  if (!apiKey) apiKey = request.headers.get("x-api-key");
+  if (env.API_SECRET && apiKey !== env.API_SECRET) {
+    return sendJson({ok:false, error:"无效API密钥"}, 401);
+  }
+  
   // -- Bot 配置 --
   if (url.pathname === "/api/bot") {
     if (method === "POST") {
@@ -96,3 +111,4 @@ export async function onRequest(context) {
   // 其它
   return sendJson({ok:false, error:"Not found"}, 404);
 }
+
