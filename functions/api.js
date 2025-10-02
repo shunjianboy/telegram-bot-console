@@ -4,7 +4,10 @@ export async function onRequest(context) {
   const method = request.method;
   const sendJson = (data, status=200) => new Response(JSON.stringify(data), {
     status,
-    headers: {"Content-Type": "application/json", "Access-Control-Allow-Origin": "*"}
+    headers: {
+      "Content-Type": "application/json",
+      "Access-Control-Allow-Origin": "*"
+    }
   });
 
   // -- Bot 配置 --
