@@ -1,503 +1,1151 @@
-export default {
-  async fetch(request, env, ctx) {
-    const url = new URL(request.url);
-
-    function jsonResponse(body, status = 200) {
-      return new Response(
-        typeof body === "string" ? body : JSON.stringify(body),
-        {
-          status,
-          headers: {
-            "Content-Type": "application/json",
-            "Access-Control-Allow-Origin": "*"
-          }
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Telegram Bot 多Bot管理后台</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            padding-top: 20px;
+            padding-bottom: 50px;
         }
-      );
-    }
-
-    if (request.method === "OPTIONS") {
-      return new Response(null, {
-        status: 204,
-        headers: {
-          "Access-Control-Allow-Origin": "*",
-          "Access-Control-Allow-Methods": "GET,POST,DELETE,OPTIONS",
-          "Access-Control-Allow-Headers": "Content-Type,Authorization",
-        },
-      });
-    }
-
-    try {
-      // 登录
-      if (url.pathname === "/api/login" && request.method === "POST") {
-        const { password } = await request.json();
-        if (password && password === env.ADMIN_PASS) {
-          return jsonResponse({ ok: true });
+        .hidden {
+            display: none;
         }
-        return jsonResponse({ ok: false, error: "密码错误" }, 401);
-      }
+        .card {
+            margin-bottom: 20px;
+        }
+        .alert {
+            margin-top: 20px;
+        }
+        .bot-item {
+            margin-bottom: 10px;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        #deleteConfirmModal .modal-body {
+            color: #dc3545;
+            font-weight: bold;
+        }
+        .customer-id-badge {
+            cursor: pointer;
+            margin: 5px;
+        }
+        .toggle-selected {
+            margin-bottom: 10px;
+        }
+        .keyword-item {
+            margin-bottom: 10px;
+            padding: 10px;
+            border: 1px solid #eee;
+            border-radius: 5px;
+        }
+        #startMessagePreview {
+            max-width: 300px;
+            max-height: 300px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- 登录页 -->
+        <div id="loginPage">
+            <div class="row justify-content-center">
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-header bg-primary text-white">
+                            <h3 class="mb-0">Telegram Bot 管理后台登录</h3>
+                        </div>
+                        <div class="card-body">
+                            <form id="loginForm">
+                                <div class="mb-3">
+                                    <label for="password" class="form-label">管理密码</label>
+                                    <input type="password" class="form-control" id="password" required>
+                                </div>
+                                <button type="submit" class="btn btn-primary">登录</button>
+                            </form>
+                            <div id="loginError" class="alert alert-danger mt-3 hidden"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
 
-      // 获取所有Bot配置
-      if (url.pathname === "/api/bots" && request.method === "GET") {
-        const bots = await env.TELEGRAM_BOT_USERS.get("bots", "json") || {};
-        return jsonResponse(bots);
-      }
-      // 新增/更新Bot配置 + 自动设置Webhook
-      if (url.pathname === "/api/bots" && request.method === "POST") {
-        const { api_pass, bot_name, token, admins } = await request.json();
-        if (api_pass !== env.ADMIN_PASS) return jsonResponse({ok:false,error:"未授权"},401);
-        let bots = await env.TELEGRAM_BOT_USERS.get("bots", "json") || {};
-        bots[bot_name] = { token, admins };
-        await env.TELEGRAM_BOT_USERS.put("bots", JSON.stringify(bots));
-        // 自动设置Webhook
-        try {
-          const webhookUrl = `https://${url.hostname}/webhook/${bot_name}`;
-          const r = await fetch(`https://api.telegram.org/bot${token}/setWebhook?url=${encodeURIComponent(webhookUrl)}`);
-          const setWebhookResult = await r.json();
-          if (!setWebhookResult.ok) {
-            return jsonResponse({ok:true, warning: "Bot已添加，但设置Webhook失败："+setWebhookResult.description});
-          }
-        } catch(e) {}
-        return jsonResponse({ok:true});
-      }
-      // 删除Bot配置
-      if (url.pathname === "/api/bots" && request.method === "DELETE") {
-        const { api_pass, bot_name } = await request.json();
-        if (api_pass !== env.ADMIN_PASS) return jsonResponse({ok:false,error:"未授权"},401);
+        <!-- 主页面 -->
+        <div id="mainPage" class="hidden">
+            <h1 class="mb-4">Telegram Bot 多Bot管理后台</h1>
+            
+            <ul class="nav nav-tabs mb-4" id="mainTabs" role="tablist">
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link active" id="bots-tab" data-bs-toggle="tab" data-bs-target="#bots-panel" type="button" role="tab" aria-controls="bots-panel" aria-selected="true">Bot配置</button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="customers-tab" data-bs-toggle="tab" data-bs-target="#customers-panel" type="button" role="tab" aria-controls="customers-panel" aria-selected="false">客户ID列表</button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="send-tab" data-bs-toggle="tab" data-bs-target="#send-panel" type="button" role="tab" aria-controls="send-panel" aria-selected="false">发送消息</button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="broadcast-tab" data-bs-toggle="tab" data-bs-target="#broadcast-panel" type="button" role="tab" aria-controls="broadcast-panel" aria-selected="false">群发消息</button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="keywords-tab" data-bs-toggle="tab" data-bs-target="#keywords-panel" type="button" role="tab" aria-controls="keywords-panel" aria-selected="false">关键词管理</button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="startmsg-tab" data-bs-toggle="tab" data-bs-target="#startmsg-panel" type="button" role="tab" aria-controls="startmsg-panel" aria-selected="false">启动消息</button>
+                </li>
+            </ul>
+            
+            <div class="tab-content" id="mainTabContent">
+                <!-- Bot配置面板 -->
+                <div class="tab-pane fade show active" id="bots-panel" role="tabpanel" aria-labelledby="bots-tab">
+                    <div class="card">
+                        <div class="card-header bg-primary text-white">
+                            <h3 class="mb-0">Bot配置</h3>
+                        </div>
+                        <div class="card-body">
+                            <form id="botForm">
+                                <div class="mb-3">
+                                    <label for="botName" class="form-label">Bot名称(用户名)</label>
+                                    <input type="text" class="form-control" id="botName" placeholder="如 mytest_bot" required>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="botToken" class="form-label">Bot Token</label>
+                                    <input type="text" class="form-control" id="botToken" required>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="botAdmins" class="form-label">管理员ID(多个用英文逗号分隔)</label>
+                                    <input type="text" class="form-control" id="botAdmins" required>
+                                </div>
+                                <button type="submit" class="btn btn-primary">添加/更新Bot</button>
+                            </form>
+                            <div id="botFormAlert" class="alert hidden"></div>
+                            
+                            <hr>
+                            
+                            <h4 class="mt-4">现有Bot列表</h4>
+                            <button id="refreshBotList" class="btn btn-outline-primary mb-3">刷新Bot列表</button>
+                            <div id="botList"></div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 客户ID列表面板 -->
+                <div class="tab-pane fade" id="customers-panel" role="tabpanel" aria-labelledby="customers-tab">
+                    <div class="card">
+                        <div class="card-header bg-primary text-white">
+                            <h3 class="mb-0">客户ID列表</h3>
+                        </div>
+                        <div class="card-body">
+                            <div class="mb-3">
+                                <label for="customerBotSelect" class="form-label">选择Bot</label>
+                                <select class="form-select" id="customerBotSelect"></select>
+                            </div>
+                            <button id="refreshCustomerList" class="btn btn-primary">刷新客户ID</button>
+                            <div id="customerList" class="mt-4"></div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 发送消息面板 -->
+                <div class="tab-pane fade" id="send-panel" role="tabpanel" aria-labelledby="send-tab">
+                    <div class="card">
+                        <div class="card-header bg-primary text-white">
+                            <h3 class="mb-0">发送消息（单发）</h3>
+                        </div>
+                        <div class="card-body">
+                            <form id="sendForm">
+                                <div class="mb-3">
+                                    <label for="sendBotSelect" class="form-label">选择Bot</label>
+                                    <select class="form-select" id="sendBotSelect" required></select>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="sendAdminId" class="form-label">管理员ID</label>
+                                    <input type="text" class="form-control" id="sendAdminId" required>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="sendCustomerId" class="form-label">客户ID(可多选,用逗号分隔)</label>
+                                    <input type="text" class="form-control" id="sendCustomerId" required>
+                                    <div class="mt-2" id="selectedCustomersDisplay"></div>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="sendText" class="form-label">内容</label>
+                                    <textarea class="form-control" id="sendText" rows="5" required></textarea>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="sendFileType" class="form-label">文件类型（可选）</label>
+                                    <select class="form-select" id="sendFileType">
+                                        <option value="">无文件</option>
+                                        <option value="photo">图片</option>
+                                        <option value="document">文件</option>
+                                        <option value="video">视频</option>
+                                    </select>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="sendFileUrl" class="form-label">文件URL（可选）</label>
+                                    <input type="url" class="form-control" id="sendFileUrl">
+                                    <div class="form-text">文件URL可以是直链、Telegram文件ID等</div>
+                                </div>
+                                <button type="submit" class="btn btn-primary">发送</button>
+                            </form>
+                            <div id="sendAlert" class="alert hidden mt-3"></div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 群发消息面板 -->
+                <div class="tab-pane fade" id="broadcast-panel" role="tabpanel" aria-labelledby="broadcast-tab">
+                    <div class="card">
+                        <div class="card-header bg-primary text-white">
+                            <h3 class="mb-0">群发消息</h3>
+                        </div>
+                        <div class="card-body">
+                            <form id="broadcastForm">
+                                <div class="mb-3">
+                                    <label for="broadcastBotSelect" class="form-label">选择Bot</label>
+                                    <select class="form-select" id="broadcastBotSelect" required></select>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="broadcastAdminId" class="form-label">管理员ID</label>
+                                    <input type="text" class="form-control" id="broadcastAdminId" required>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="broadcastText" class="form-label">内容</label>
+                                    <textarea class="form-control" id="broadcastText" rows="5" required></textarea>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="broadcastFileType" class="form-label">文件类型（可选）</label>
+                                    <select class="form-select" id="broadcastFileType">
+                                        <option value="">无文件</option>
+                                        <option value="photo">图片</option>
+                                        <option value="document">文件</option>
+                                        <option value="video">视频</option>
+                                    </select>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="broadcastFileUrl" class="form-label">文件URL（可选）</label>
+                                    <input type="url" class="form-control" id="broadcastFileUrl">
+                                    <div class="form-text">文件URL可以是直链、Telegram文件ID等</div>
+                                </div>
+                                <button type="submit" class="btn btn-primary">群发</button>
+                            </form>
+                            <div id="broadcastAlert" class="alert hidden mt-3"></div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 关键词管理面板 -->
+                <div class="tab-pane fade" id="keywords-panel" role="tabpanel" aria-labelledby="keywords-tab">
+                    <div class="card">
+                        <div class="card-header bg-primary text-white">
+                            <h3 class="mb-0">关键词管理</h3>
+                        </div>
+                        <div class="card-body">
+                            <div class="mb-3">
+                                <label for="keywordBotSelect" class="form-label">选择Bot</label>
+                                <select class="form-select" id="keywordBotSelect"></select>
+                            </div>
+                            <button id="refreshKeywordList" class="btn btn-outline-primary mb-3">刷新关键词列表</button>
+                            
+                            <form id="keywordForm" class="mt-4">
+                                <h4>添加关键词</h4>
+                                <div class="mb-3">
+                                    <label for="keywordType" class="form-label">匹配类型</label>
+                                    <select class="form-select" id="keywordType" required>
+                                        <option value="equal">完全匹配</option>
+                                        <option value="contain">包含关键词</option>
+                                    </select>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="keyword" class="form-label">关键词</label>
+                                    <input type="text" class="form-control" id="keyword" required>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="keywordReply" class="form-label">自动回复内容</label>
+                                    <textarea class="form-control" id="keywordReply" rows="3" required></textarea>
+                                </div>
+                                <button type="submit" class="btn btn-primary">添加关键词</button>
+                            </form>
+                            <div id="keywordAlert" class="alert hidden mt-3"></div>
+                            
+                            <hr>
+                            
+                            <h4 class="mt-4">关键词列表</h4>
+                            <div id="keywordList"></div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 启动消息面板 -->
+                <div class="tab-pane fade" id="startmsg-panel" role="tabpanel" aria-labelledby="startmsg-tab">
+                    <div class="card">
+                        <div class="card-header bg-primary text-white">
+                            <h3 class="mb-0">启动消息设置</h3>
+                        </div>
+                        <div class="card-body">
+                            <div class="mb-3">
+                                <label for="startmsgBotSelect" class="form-label">选择Bot</label>
+                                <select class="form-select" id="startmsgBotSelect"></select>
+                            </div>
+                            <button id="refreshStartMsg" class="btn btn-outline-primary mb-3">获取当前设置</button>
+                            
+                            <form id="startmsgForm" class="mt-4">
+                                <div class="mb-3">
+                                    <label for="startmsgType" class="form-label">消息类型</label>
+                                    <select class="form-select" id="startmsgType" required>
+                                        <option value="none">纯文本</option>
+                                        <option value="photo">带图片</option>
+                                    </select>
+                                </div>
+                                <div class="mb-3" id="startmsgFileUrlGroup">
+                                    <label for="startmsgFileUrl" class="form-label">图片URL</label>
+                                    <input type="text" class="form-control" id="startmsgFileUrl">
+                                    <div class="form-text">可以是图片直链或Telegram文件ID</div>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="startmsgText" class="form-label">消息文本</label>
+                                    <textarea class="form-control" id="startmsgText" rows="4" required></textarea>
+                                </div>
+                                <div class="mb-3" id="startmsgPreviewGroup">
+                                    <label>预览图片</label>
+                                    <div>
+                                        <img id="startMessagePreview" src="" class="img-fluid d-none" alt="图片预览">
+                                    </div>
+                                </div>
+                                <button type="submit" class="btn btn-primary">保存启动消息</button>
+                            </form>
+                            <div id="startmsgAlert" class="alert hidden mt-3"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 删除确认对话框 -->
+    <div class="modal fade" id="deleteConfirmModal" tabindex="-1" aria-labelledby="deleteConfirmModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header bg-danger text-white">
+                    <h5 class="modal-title" id="deleteConfirmModalLabel">确认删除</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    确定要删除这个Bot吗？此操作无法撤销！
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-danger" id="confirmDeleteBot">确定删除</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 删除关键词确认对话框 -->
+    <div class="modal fade" id="deleteKeywordModal" tabindex="-1" aria-labelledby="deleteKeywordModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header bg-danger text-white">
+                    <h5 class="modal-title" id="deleteKeywordModalLabel">确认删除</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    确定要删除这个关键词吗？
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-danger" id="confirmDeleteKeyword">确定删除</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap Bundle with Popper -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <script>
+        // 全局变量
+        let API_URL = '';
+        let API_PASS = '';
+        let BOTS = {};
+        let SELECTED_CUSTOMERS = [];
+        let deleteConfirmCallback = null;
+        let deleteKeywordCallback = null;
         
-        try {
-          let bots = await env.TELEGRAM_BOT_USERS.get("bots", "json") || {};
-          if (bots[bot_name]) {
-            delete bots[bot_name];
-            await env.TELEGRAM_BOT_USERS.put("bots", JSON.stringify(bots));
-            return jsonResponse({ok:true});
-          } else {
-            return jsonResponse({ok:false,error:"未找到Bot"},404);
-          }
-        } catch (error) {
-          console.error("删除Bot错误:", error);
-          return jsonResponse({ok:false,error:"删除Bot失败: " + error.message}, 500);
-        }
-      }
-
-      // 获取客户ID列表
-      if (url.pathname.startsWith("/api/customers/") && request.method === "GET") {
-        const bot_name = decodeURIComponent(url.pathname.split("/").pop());
-        const { results } = await env.telegram_bot.prepare(
-          "SELECT DISTINCT user_id FROM chat_logs WHERE bot_name = ?"
-        ).bind(bot_name).all();
-        const ids = results.map(r => r.user_id);
-        return jsonResponse(ids);
-      }
-
-      // 启动消息查询
-      if (url.pathname === "/api/startmsg" && request.method === "GET") {
-        const bot_name = url.searchParams.get("bot_name");
-        const startmsg = await env.TELEGRAM_BOT_USERS.get(`startmsg_${bot_name}`, "json") || {type:"none"};
-        return jsonResponse(startmsg);
-      }
-      // 启动消息设置
-      if (url.pathname === "/api/startmsg" && request.method === "POST") {
-        const { api_pass, bot_name, type, fileUrl, caption } = await request.json();
-        if (api_pass !== env.ADMIN_PASS) return jsonResponse({ok:false,error:"未授权"},401);
-        await env.TELEGRAM_BOT_USERS.put(`startmsg_${bot_name}`, JSON.stringify({type, fileUrl, caption}));
-        return jsonResponse({ok:true});
-      }
-
-      // 群发通知
-      if (url.pathname === "/api/broadcast" && request.method === "POST") {
-        const { api_pass, bot_name, admin_id, text, fileType, fileUrl } = await request.json();
-        if (api_pass !== env.ADMIN_PASS) return jsonResponse({ok:false,error:"未授权"},401);
-        let bots = await env.TELEGRAM_BOT_USERS.get("bots", "json") || {};
-        const bot = bots[bot_name];
-        if (!bot || !bot.admins.includes(admin_id)) return jsonResponse({ok:false,error:"未授权"},401);
-
-        // 查找该bot所有聊过天的用户
-        const { results } = await env.telegram_bot.prepare(
-          "SELECT DISTINCT user_id FROM chat_logs WHERE bot_name = ?"
-        ).bind(bot_name).all();
-        const customer_ids = results.map(r => r.user_id);
-
-        let resultsArr = [];
-        let warnArr = [];
-        let failedUserIds = []; // 记录失败的用户ID
-        
-        for(const id of customer_ids){
-          let api = "sendMessage";
-          let data = {chat_id: id, text: text};
-          if (fileType && fileUrl) {
-            if (fileType === "photo") {
-              api = "sendPhoto";
-              data = {chat_id: id, photo: fileUrl, caption: text || ""};
-            } else if (fileType === "document") {
-              api = "sendDocument";
-              data = {chat_id: id, document: fileUrl, caption: text || ""};
-            }
-          }
-          const res = await fetch(`https://api.telegram.org/bot${bot.token}/${api}`, {
-            method:"POST",
-            headers:{"Content-Type":"application/json"},
-            body:JSON.stringify(data)
-          });
-          const result = await res.json();
-          resultsArr.push(result);
-          
-          // 检查失败原因
-          if (!result.ok && result.description) {
-            if (
-              result.description.includes("bot was blocked by the user") ||
-              result.description.includes("user is deactivated") ||
-              result.description.includes("chat not found")
-            ) {
-              const warningMsg = `⚠️ 用户 ${id} 未收到消息：用户已删除机器人或删除了账户`;
-              warnArr.push(warningMsg);
-              failedUserIds.push(id);
-            }
-          }
-        }
-        
-        // 如果有失败的发送，立即给发送这条广播的管理员发送警告通知
-        if (warnArr.length > 0) {
-          await fetch(`https://api.telegram.org/bot${bot.token}/sendMessage`, {
-            method: "POST",
-            headers: {"Content-Type": "application/json"},
-            body: JSON.stringify({
-              chat_id: admin_id,
-              text: `⚠️ 系统警告 ⚠️\n\n${warnArr.join('\n')}\n\n这些用户可能已停用或删除了机器人，无法接收消息。`
-            })
-          });
-        }
-        
-        return jsonResponse({ok:true, results: resultsArr, count: customer_ids.length, warnings: warnArr, failedUsers: failedUserIds});
-      }
-
-      // 管理后台发消息/文件（单发）
-      if (url.pathname === "/api/send" && request.method === "POST") {
-        const { api_pass, bot_name, admin_id, customer_ids, text, fileType, fileUrl } = await request.json();
-        if (api_pass !== env.ADMIN_PASS) return jsonResponse({ok:false,error:"未授权"},401);
-        let bots = await env.TELEGRAM_BOT_USERS.get("bots", "json") || {};
-        const bot = bots[bot_name];
-        if (!bot || !bot.admins.includes(admin_id)) return jsonResponse({ok:false,error:"未授权"},401);
-        let results = [];
-        let warnArr = [];
-        let failedUserIds = []; // 记录失败的用户ID
-        
-        for(const id of customer_ids){
-          let api = "sendMessage";
-          let data = {chat_id: id, text: text};
-          if (fileType && fileUrl) {
-            if (fileType === "photo") {
-              api = "sendPhoto";
-              data = {chat_id: id, photo: fileUrl, caption: text || ""};
-            } else if (fileType === "document") {
-              api = "sendDocument";
-              data = {chat_id: id, document: fileUrl, caption: text || ""};
-            }
-          }
-          const res = await fetch(`https://api.telegram.org/bot${bot.token}/${api}`, {
-            method:"POST",
-            headers:{"Content-Type":"application/json"},
-            body:JSON.stringify(data)
-          });
-          const result = await res.json();
-          results.push(result);
-          
-          // 检查失败原因
-          if (!result.ok && result.description) {
-            if (
-              result.description.includes("bot was blocked by the user") ||
-              result.description.includes("user is deactivated") ||
-              result.description.includes("chat not found")
-            ) {
-              const warningMsg = `⚠️ 用户 ${id} 未收到消息：用户已删除机器人或删除了账户`;
-              warnArr.push(warningMsg);
-              failedUserIds.push(id);
-            }
-          }
-        }
-        
-        // 如果有失败的发送，立即给发送这条消息的管理员发送警告通知
-        if (warnArr.length > 0) {
-          await fetch(`https://api.telegram.org/bot${bot.token}/sendMessage`, {
-            method: "POST",
-            headers: {"Content-Type": "application/json"},
-            body: JSON.stringify({
-              chat_id: admin_id,
-              text: `⚠️ 系统警告 ⚠️\n\n${warnArr.join('\n')}\n\n这些用户可能已停用或删除了机器人，无法接收消息。`
-            })
-          });
-        }
-        
-        return jsonResponse({ok:true, results, warnings: warnArr, failedUsers: failedUserIds});
-      }
-
-      // 关键词自动回复API
-      // 查询
-      if (url.pathname === "/api/keywords" && request.method === "GET") {
-        const bot_name = url.searchParams.get("bot_name");
-        const keywords = await env.TELEGRAM_BOT_USERS.get(`keywords_${bot_name}`, "json") || [];
-        return jsonResponse(keywords);
-      }
-      // 添加
-      if (url.pathname === "/api/keywords" && request.method === "POST") {
-        const { api_pass, bot_name, type, keyword, reply } = await request.json();
-        if (api_pass !== env.ADMIN_PASS) return jsonResponse({ok:false,error:"未授权"},401);
-        let keywords = await env.TELEGRAM_BOT_USERS.get(`keywords_${bot_name}`, "json") || [];
-        keywords.push({type, keyword, reply});
-        await env.TELEGRAM_BOT_USERS.put(`keywords_${bot_name}`, JSON.stringify(keywords));
-        return jsonResponse({ok:true});
-      }
-      // 删除
-      if (url.pathname === "/api/keywords" && request.method === "DELETE") {
-        const { api_pass, bot_name, idx } = await request.json();
-        if (api_pass !== env.ADMIN_PASS) return jsonResponse({ok:false,error:"未授权"},401);
-        let keywords = await env.TELEGRAM_BOT_USERS.get(`keywords_${bot_name}`, "json") || [];
-        keywords.splice(idx,1);
-        await env.TELEGRAM_BOT_USERS.put(`keywords_${bot_name}`, JSON.stringify(keywords));
-        return jsonResponse({ok:true});
-      }
-
-      // ========== Telegram Webhook ==========
-      if (url.pathname.startsWith("/webhook/") && request.method === "POST") {
-        const bot_name = decodeURIComponent(url.pathname.split("/").pop());
-        let bots = await env.TELEGRAM_BOT_USERS.get("bots", "json") || {};
-        const bot = bots[bot_name];
-        if (!bot) {
-          return jsonResponse({ok:false,error:"未配置该bot"},400);
-        }
-        const body = await request.json();
-        if(!body.message) {
-          return jsonResponse({ok:false,error:"非消息"},200);
-        }
-        const msg = body.message;
-        const from = msg.from;
-        const isAdmin = bot.admins.includes(from.id.toString());
-
-        // ====== 处理启动消息 /start 图片/纯文字 ======
-        if (msg.text && msg.text.trim().startsWith("/start")) {
-          let startmsg = await env.TELEGRAM_BOT_USERS.get(`startmsg_${bot_name}`, "json");
-          if (!startmsg || !startmsg.type || startmsg.type === "none" || !startmsg.fileUrl) {
-            const text = (startmsg && startmsg.caption) ? startmsg.caption : "欢迎使用本机器人！";
-            await fetch(`https://api.telegram.org/bot${bot.token}/sendMessage`, {
-              method: "POST",
-              headers: {"Content-Type": "application/json"},
-              body: JSON.stringify({
-                chat_id: msg.chat.id,
-                text
-              })
-            });
-            return new Response("ok");
-          }
-          // 图片
-          if (startmsg.type === "photo" && startmsg.fileUrl) {
-            await fetch(`https://api.telegram.org/bot${bot.token}/sendPhoto`, {
-              method: "POST",
-              headers: {"Content-Type": "application/json"},
-              body: JSON.stringify({
-                chat_id: msg.chat.id,
-                photo: startmsg.fileUrl,
-                caption: startmsg.caption || ""
-              })
-            });
-            return new Response("ok");
-          }
-          return new Response("ok");
-        }
-
-        // ====== 关键词自动回复，管理员也收到提醒 ======
-        let keywords = [];
-        try {
-          let kdata = await env.TELEGRAM_BOT_USERS.get(`keywords_${bot_name}`, "json");
-          if (kdata && Array.isArray(kdata)) keywords = kdata;
-        } catch(e){}
-        let matched = keywords.find(item =>
-          item.type==="equal" && msg.text && msg.text.trim() === item.keyword.trim()
-        );
-        if (!matched) {
-          matched = keywords.find(item =>
-            item.type==="contain" && msg.text && msg.text.includes(item.keyword)
-          );
-        }
-        if (matched) {
-          // 1. 自动回复给客户
-          await fetch(`https://api.telegram.org/bot${bot.token}/sendMessage`, {
-            method: "POST",
-            headers: {"Content-Type": "application/json"},
-            body: JSON.stringify({
-              chat_id: msg.chat.id,
-              text: matched.reply
-            })
-          });
-          // 2. 通知所有管理员（带#id，支持回复转发）
-          const showName = msg.from.username ? `@${msg.from.username}` : (msg.from.first_name || "") + (msg.from.last_name || "");
-          for (const admin_id of bot.admins) {
-            await fetch(`https://api.telegram.org/bot${bot.token}/sendMessage`, {
-              method: "POST",
-              headers: {"Content-Type": "application/json"},
-              body: JSON.stringify({
-                chat_id: admin_id,
-                text: `【关键词自动回复提醒】\n来自：${showName} [${msg.from.id}]\n消息内容：${msg.text}\n触发关键词：${matched.keyword}\n自动回复：${matched.reply}\n#id${msg.from.id}`
-              })
-            });
-          }
-          // 命中关键词回复后直接return，不再走后续客服逻辑
-          return new Response("ok");
-        }
-
-        // ========== 客户消息转发给所有管理员 ==========
-        if (!isAdmin) {
-          // 记录客户ID
-          await env.telegram_bot.prepare(
-            "INSERT OR IGNORE INTO chat_logs (bot_name, user_id) VALUES (?,?)"
-          ).bind(bot_name, from.id).run();
-
-          const showName = msg.from.username ? `@${msg.from.username}` : (msg.from.first_name || "") + (msg.from.last_name || "");
-          const admin_caption = `👆 ${showName} [${from.id}] 发送的消息 #id${from.id}\n👉 回复此消息即可回复用户`;
-
-          for (const admin_id of bot.admins) {
-            if (msg.photo) {
-              const photoFileId = msg.photo[msg.photo.length-1].file_id;
-              await fetch(`https://api.telegram.org/bot${bot.token}/sendPhoto`, {
-                method: "POST",
-                headers: {"Content-Type": "application/json"},
-                body: JSON.stringify({
-                  chat_id: admin_id,
-                  photo: photoFileId,
-                  caption: admin_caption + (msg.caption ? ("\n" + msg.caption) : "")
-                })
-              });
-            } else if (msg.document) {
-              await fetch(`https://api.telegram.org/bot${bot.token}/sendDocument`, {
-                method: "POST",
-                headers: {"Content-Type": "application/json"},
-                body: JSON.stringify({
-                  chat_id: admin_id,
-                  document: msg.document.file_id,
-                  caption: admin_caption + (msg.caption ? ("\n" + msg.caption) : "")
-                })
-              });
-            } else if (msg.text) {
-              await fetch(`https://api.telegram.org/bot${bot.token}/sendMessage`, {
-                method: "POST",
-                headers: {"Content-Type": "application/json"},
-                body: JSON.stringify({
-                  chat_id: admin_id,
-                  text: admin_caption + "\n" + msg.text
-                })
-              });
+        // DOM加载完成后执行
+        document.addEventListener('DOMContentLoaded', function() {
+            // 根据URL判断API地址
+            const hostname = window.location.hostname;
+            if (hostname.includes('pages.dev')) {
+                // 在Pages中运行，使用相对路径
+                API_URL = window.location.origin.replace('-ckx.pages.dev', '-api.shunjianboy-e0e.workers.dev');
             } else {
-              // 其它类型，兜底
-              await fetch(`https://api.telegram.org/bot${bot.token}/sendMessage`, {
-                method: "POST",
-                headers: {"Content-Type": "application/json"},
-                body: JSON.stringify({
-                  chat_id: admin_id,
-                  text: admin_caption + "\n[收到未知类型消息]"
-                })
-              });
+                // 本地测试环境
+                API_URL = 'https://telegram-bot-api.shunjianboy-e0e.workers.dev';
             }
-          }
-        }
 
-        // ========== 管理员回复（转发给客户） ==========
-        else {
-          // 只处理"回复某条消息"情景
-          let foundId = null;
-          if (msg.reply_to_message && msg.reply_to_message.caption) {
-            // 优先从caption中找 #id
-            const m = msg.reply_to_message.caption.match(/#id(\d+)/);
-            if (m) foundId = m[1];
-          }
-          if (!foundId && msg.reply_to_message && msg.reply_to_message.text) {
-            const m = msg.reply_to_message.text.match(/#id(\d+)/);
-            if (m) foundId = m[1];
-          }
-          
-          // 管理员发送了消息但没有回复任何用户消息
-          if (!msg.reply_to_message) {
-            // 提醒管理员需要回复用户消息才能回复给用户
-            await fetch(`https://api.telegram.org/bot${bot.token}/sendMessage`, {
-              method: "POST",
-              headers: {"Content-Type": "application/json"},
-              body: JSON.stringify({
-                chat_id: from.id,
-                text: "⚠️ 错误：您需要回复用户的消息才能发送回复。\n\n请找到包含用户ID的消息，点击回复后再发送您的消息。直接发送的消息不会转发给任何用户。"
-              })
-            });
-            return new Response("ok");
-          }
-          // 管理员回复了消息但没找到目标ID
-          else if (!foundId) {
-            await fetch(`https://api.telegram.org/bot${bot.token}/sendMessage`, {
-              method: "POST",
-              headers: {"Content-Type": "application/json"},
-              body: JSON.stringify({
-                chat_id: from.id,
-                text: "⚠️ 错误：无法识别回复目标用户。\n\n请确保您回复的是包含有 #id 标识的消息。"
-              })
-            });
-            return new Response("ok");
-          }
-          
-          if (foundId) {
-            const target_id = foundId;
-            let sendSuccess = false;
-            let sendErrors = [];
+            console.log('API URL:', API_URL);
             
-            // 支持多种类型
-            if (msg.text) {
-              const res = await fetch(`https://api.telegram.org/bot${bot.token}/sendMessage`, {
-                method: "POST",
-                headers: {"Content-Type": "application/json"},
-                body: JSON.stringify({chat_id: target_id, text: msg.text})
-              });
-              const result = await res.json();
-              if (result.ok) sendSuccess = true;
-              else sendErrors.push("文本消息发送失败: " + (result.description || "未知错误"));
+            // 检查本地存储中是否有保存的密码
+            const savedPass = localStorage.getItem('tg_bot_api_pass');
+            if (savedPass) {
+                API_PASS = savedPass;
+                testLogin();
             }
-            if (msg.photo) {
-              const res = await fetch(`https://api.telegram.org/bot${bot.token}/sendPhoto`, {
-                method: "POST",
-                headers: {"Content-Type": "application/json"},
-                body: JSON.stringify({chat_id: target_id, photo: msg.photo[msg.photo.length-1].file_id, caption: msg.caption || ""})
-              });
-              const result = await res.json();
-              if (result.ok) sendSuccess = true;
-              else sendErrors.push("图片消息发送失败: " + (result.description || "未知错误"));
-            }
-            if (msg.document) {
-              const res = await fetch(`https://api.telegram.org/bot${bot.token}/sendDocument`, {
-                method: "POST",
-                headers: {"Content-Type": "application/json"},
-                body: JSON.stringify({chat_id: target_id, document: msg.document.file_id, caption: msg.caption || ""})
-              });
-              const result = await res.json();
-              if (result.ok) sendSuccess = true;
-              else sendErrors.push("文件消息发送失败: " + (result.description || "未知错误"));
+
+            // 登录表单提交
+            document.getElementById('loginForm').addEventListener('submit', function(e) {
+                e.preventDefault();
+                const password = document.getElementById('password').value;
+                login(password);
+            });
+            
+            // Bot表单提交
+            document.getElementById('botForm').addEventListener('submit', function(e) {
+                e.preventDefault();
+                addOrUpdateBot();
+            });
+            
+            // 刷新Bot列表
+            document.getElementById('refreshBotList').addEventListener('click', function() {
+                loadBots();
+            });
+            
+            // 客户ID相关
+            document.getElementById('customerBotSelect').addEventListener('change', function() {
+                loadCustomers();
+            });
+            
+            document.getElementById('refreshCustomerList').addEventListener('click', function() {
+                loadCustomers();
+            });
+            
+            // 消息发送相关
+            document.getElementById('sendBotSelect').addEventListener('change', function() {
+                updateSendAdminId();
+            });
+            
+            document.getElementById('broadcastBotSelect').addEventListener('change', function() {
+                updateBroadcastAdminId();
+            });
+            
+            document.getElementById('sendForm').addEventListener('submit', function(e) {
+                e.preventDefault();
+                sendMessage();
+            });
+            
+            document.getElementById('broadcastForm').addEventListener('submit', function(e) {
+                e.preventDefault();
+                broadcastMessage();
+            });
+            
+            // 关键词相关
+            document.getElementById('keywordBotSelect').addEventListener('change', function() {
+                loadKeywords();
+            });
+            
+            document.getElementById('refreshKeywordList').addEventListener('click', function() {
+                loadKeywords();
+            });
+            
+            document.getElementById('keywordForm').addEventListener('submit', function(e) {
+                e.preventDefault();
+                addKeyword();
+            });
+            
+            // 确认删除Bot
+            document.getElementById('confirmDeleteBot').addEventListener('click', function() {
+                if (typeof deleteConfirmCallback === 'function') {
+                    deleteConfirmCallback();
+                }
+                const modal = bootstrap.Modal.getInstance(document.getElementById('deleteConfirmModal'));
+                modal.hide();
+            });
+
+            // 确认删除关键词
+            document.getElementById('confirmDeleteKeyword').addEventListener('click', function() {
+                if (typeof deleteKeywordCallback === 'function') {
+                    deleteKeywordCallback();
+                }
+                const modal = bootstrap.Modal.getInstance(document.getElementById('deleteKeywordModal'));
+                modal.hide();
+            });
+            
+            // 启动消息相关
+            document.getElementById('startmsgBotSelect').addEventListener('change', function() {
+                loadStartMsg();
+            });
+            
+            document.getElementById('refreshStartMsg').addEventListener('click', function() {
+                loadStartMsg();
+            });
+            
+            document.getElementById('startmsgForm').addEventListener('submit', function(e) {
+                e.preventDefault();
+                saveStartMsg();
+            });
+            
+            document.getElementById('startmsgType').addEventListener('change', function() {
+                toggleStartMsgFileUrl();
+            });
+            
+            document.getElementById('startmsgFileUrl').addEventListener('input', function() {
+                previewStartMsgImage();
+            });
+        });
+        
+        // 尝试使用保存的密码登录
+        function testLogin() {
+            fetch(`${API_URL}/api/login`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({password: API_PASS})
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.ok) {
+                    showMainPage();
+                    loadBots();
+                } else {
+                    showLoginPage();
+                }
+            })
+            .catch(error => {
+                console.error('验证登录失败:', error);
+                showLoginPage();
+            });
+        }
+        
+        // 登录函数
+        function login(password) {
+            fetch(`${API_URL}/api/login`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({password})
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.ok) {
+                    API_PASS = password;
+                    localStorage.setItem('tg_bot_api_pass', password);
+                    showMainPage();
+                    loadBots();
+                } else {
+                    document.getElementById('loginError').textContent = data.error || '登录失败';
+                    document.getElementById('loginError').classList.remove('hidden');
+                }
+            })
+            .catch(error => {
+                console.error('登录失败:', error);
+                document.getElementById('loginError').textContent = '网络错误，请重试';
+                document.getElementById('loginError').classList.remove('hidden');
+            });
+        }
+        
+        // 显示主页面
+        function showMainPage() {
+            document.getElementById('loginPage').classList.add('hidden');
+            document.getElementById('mainPage').classList.remove('hidden');
+        }
+        
+        // 显示登录页面
+        function showLoginPage() {
+            document.getElementById('loginPage').classList.remove('hidden');
+            document.getElementById('mainPage').classList.add('hidden');
+            document.getElementById('loginError').classList.add('hidden');
+        }
+        
+        // 加载Bot列表
+        function loadBots() {
+            fetch(`${API_URL}/api/bots`)
+            .then(response => response.json())
+            .then(data => {
+                BOTS = data;
+                displayBots(data);
+                updateBotSelects(data);
+            })
+            .catch(error => {
+                console.error('加载Bot列表失败:', error);
+                showAlert('botFormAlert', '加载Bot列表失败', 'danger');
+            });
+        }
+        
+        // 显示Bot列表
+        function displayBots(bots) {
+            const botList = document.getElementById('botList');
+            botList.innerHTML = '';
+            
+            if (Object.keys(bots).length === 0) {
+                botList.innerHTML = '<div class="alert alert-info">暂无Bot，请添加</div>';
+                return;
             }
             
-            // 检查消息是否成功发送，如果失败，通知管理员
-            if (!sendSuccess) {
-              await fetch(`https://api.telegram.org/bot${bot.token}/sendMessage`, {
-                method: "POST",
-                headers: {"Content-Type": "application/json"},
-                body: JSON.stringify({
-                  chat_id: from.id,
-                  text: `⚠️ 消息发送失败 ⚠️\n\n用户 ${target_id} 可能已删除机器人或删除了账户。\n\n错误详情：${sendErrors.join("\n")}`
-                })
-              });
+            for (const [botName, botInfo] of Object.entries(bots)) {
+                const botDiv = document.createElement('div');
+                botDiv.className = 'bot-item';
+                botDiv.innerHTML = `
+                    <strong>${botName}</strong>
+                    <p>Token: ${botInfo.token}</p>
+                    <p>管理员: ${botInfo.admins.join(', ')}</p>
+                    <button class="btn btn-sm btn-danger delete-bot" data-bot="${botName}">删除</button>
+                `;
+                botList.appendChild(botDiv);
+                
+                // 添加删除按钮事件
+                const deleteBtn = botDiv.querySelector('.delete-bot');
+                deleteBtn.addEventListener('click', function() {
+                    const botToDelete = this.getAttribute('data-bot');
+                    showDeleteConfirmModal(() => deleteBot(botToDelete));
+                });
             }
-          }
         }
-
-        return new Response("ok");
-      }
-
-      return jsonResponse("Not found",404);
-
-    } catch(e) {
-      // 全局异常捕获
-      console.log("Global error:", e && e.stack ? e.stack : e);
-      return jsonResponse({ok:false,error:e && e.message ? e.message : (""+e)}, 500);
-    }
-  }
-}
+        
+        // 更新所有Bot选择框
+        function updateBotSelects(bots) {
+            const selects = [
+                document.getElementById('customerBotSelect'),
+                document.getElementById('sendBotSelect'),
+                document.getElementById('broadcastBotSelect'),
+                document.getElementById('keywordBotSelect'),
+                document.getElementById('startmsgBotSelect')
+            ];
+            
+            selects.forEach(select => {
+                select.innerHTML = '';
+                
+                if (Object.keys(bots).length === 0) {
+                    select.innerHTML = '<option value="">暂无Bot</option>';
+                    select.disabled = true;
+                    return;
+                }
+                
+                select.disabled = false;
+                for (const botName in bots) {
+                    const option = document.createElement('option');
+                    option.value = botName;
+                    option.textContent = botName;
+                    select.appendChild(option);
+                }
+                
+                // 如果是发送相关的选择框，更新管理员ID
+                if (select.id === 'sendBotSelect') {
+                    updateSendAdminId();
+                } else if (select.id === 'broadcastBotSelect') {
+                    updateBroadcastAdminId();
+                }
+            });
+            
+            // 触发加载客户列表
+            if (document.getElementById('customerBotSelect').value) {
+                loadCustomers();
+            }
+            
+            // 触发加载关键词列表
+            if (document.getElementById('keywordBotSelect').value) {
+                loadKeywords();
+            }
+            
+            // 触发加载启动消息
+            if (document.getElementById('startmsgBotSelect').value) {
+                loadStartMsg();
+            }
+        }
+        
+        // 更新发送消息的管理员ID
+        function updateSendAdminId() {
+            const botName = document.getElementById('sendBotSelect').value;
+            if (botName && BOTS[botName] && BOTS[botName].admins && BOTS[botName].admins.length > 0) {
+                document.getElementById('sendAdminId').value = BOTS[botName].admins[0];
+            }
+        }
+        
+        // 更新群发消息的管理员ID
+        function updateBroadcastAdminId() {
+            const botName = document.getElementById('broadcastBotSelect').value;
+            if (botName && BOTS[botName] && BOTS[botName].admins && BOTS[botName].admins.length > 0) {
+                document.getElementById('broadcastAdminId').value = BOTS[botName].admins[0];
+            }
+        }
+        
+        // 添加或更新Bot
+        function addOrUpdateBot() {
+            const botName = document.getElementById('botName').value;
+            const token = document.getElementById('botToken').value;
+            const adminsStr = document.getElementById('botAdmins').value;
+            const admins = adminsStr.split(',').map(id => id.trim());
+            
+            fetch(`${API_URL}/api/bots`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    api_pass: API_PASS,
+                    bot_name: botName,
+                    token,
+                    admins
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.ok) {
+                    if (data.warning) {
+                        showAlert('botFormAlert', `Bot已添加，但设置Webhook失败: ${data.warning}`, 'warning');
+                    } else {
+                        showAlert('botFormAlert', 'Bot添加/更新成功！', 'success');
+                    }
+                    document.getElementById('botForm').reset();
+                    loadBots();
+                } else {
+                    showAlert('botFormAlert', data.error || 'Bot添加/更新失败', 'danger');
+                }
+            })
+            .catch(error => {
+                console.error('添加/更新Bot失败:', error);
+                showAlert('botFormAlert', '网络错误，请重试', 'danger');
+            });
+        }
+        
+        // 删除Bot
+        function deleteBot(botName) {
+            fetch(`${API_URL}/api/bots`, {
+                method: 'DELETE',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    api_pass: API_PASS,
+                    bot_name: botName
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.ok) {
+                    showAlert('botFormAlert', `Bot "${botName}" 删除成功！`, 'success');
+                    loadBots();
+                } else {
+                    showAlert('botFormAlert', data.error || `删除Bot "${botName}" 失败`, 'danger');
+                }
+            })
+            .catch(error => {
+                console.error('删除Bot失败:', error);
+                showAlert('botFormAlert', '网络错误，请重试', 'danger');
+            });
+        }
+        
+        // 显示删除确认对话框
+        function showDeleteConfirmModal(callback) {
+            deleteConfirmCallback = callback;
+            const modal = new bootstrap.Modal(document.getElementById('deleteConfirmModal'));
+            modal.show();
+        }
+        
+        // 显示删除关键词确认对话框
+        function showDeleteKeywordModal(callback) {
+            deleteKeywordCallback = callback;
+            const modal = new bootstrap.Modal(document.getElementById('deleteKeywordModal'));
+            modal.show();
+        }
+        
+        // 加载客户ID列表
+        function loadCustomers() {
+            const botName = document.getElementById('customerBotSelect').value;
+            if (!botName) {
+                document.getElementById('customerList').innerHTML = '<div class="alert alert-info">请选择一个Bot</div>';
+                return;
+            }
+            
+            fetch(`${API_URL}/api/customers/${encodeURIComponent(botName)}`)
+            .then(response => response.json())
+            .then(data => {
+                const customerList = document.getElementById('customerList');
+                customerList.innerHTML = '';
+                
+                if (data.length === 0) {
+                    customerList.innerHTML = '<div class="alert alert-info">暂无客户记录</div>';
+                    return;
+                }
+                
+                customerList.innerHTML = `<h4>客户ID列表 (${data.length}个)</h4>`;
+                const row = document.createElement('div');
+                row.className = 'row';
+                
+                data.forEach(id => {
+                    const col = document.createElement('div');
+                    col.className = 'col-md-3 mb-2';
+                    const badge = document.createElement('span');
+                    badge.className = 'badge bg-secondary p-2 customer-id-badge';
+                    badge.textContent = id;
+                    badge.setAttribute('data-id', id);
+                    badge.style.cursor = 'pointer';
+                    badge.title = '点击复制ID';
+                    
+                    badge.addEventListener('click', function() {
+                        navigator.clipboard.writeText(id).then(() => {
+                            badge.className = 'badge bg-success p-2 customer-id-badge';
+                            setTimeout(() => {
+                                badge.className = 'badge bg-secondary p-2 customer-id-badge';
+                            }, 1000);
+                        });
+                    });
+                    
+                    col.appendChild(badge);
+                    row.appendChild(col);
+                });
+                
+                customerList.appendChild(row);
+            })
+            .catch(error => {
+                console.error('加载客户ID列表失败:', error);
+                document.getElementById('customerList').innerHTML = '<div class="alert alert-danger">加载客户ID列表失败</div>';
+            });
+        }
+        
+        // 发送消息
+        function sendMessage() {
+            const botName = document.getElementById('sendBotSelect').value;
+            const adminId = document.getElementById('sendAdminId').value;
+            const customerIds = document.getElementById('sendCustomerId').value.split(',').map(id => id.trim());
+            const text = document.getElementById('sendText').value;
+            const fileType = document.getElementById('sendFileType').value;
+            const fileUrl = document.getElementById('sendFileUrl').value;
+            
+            if (!botName || !adminId || customerIds.length === 0 || !text) {
+                showAlert('sendAlert', '请填写完整信息', 'danger');
+                return;
+            }
+            
+            const data = {
+                api_pass: API_PASS,
+                bot_name: botName,
+                admin_id: adminId,
+                customer_ids: customerIds,
+                text
+            };
+            
+            if (fileType && fileUrl) {
+                data.fileType = fileType;
+                data.fileUrl = fileUrl;
+            }
+            
+            showAlert('sendAlert', '正在发送...', 'info');
+            
+            fetch(`${API_URL}/api/send`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(data)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.ok) {
+                    let successMessage = '消息发送成功！';
+                    
+                    // 检查是否有发送失败的警告
+                    if (data.warnings && data.warnings.length > 0) {
+                        successMessage += `<br><br><strong>警告:</strong><br>${data.warnings.join('<br>')}`;
+                        showAlert('sendAlert', successMessage, 'warning');
+                    } else {
+                        showAlert('sendAlert', successMessage, 'success');
+                    }
+                    
+                    // 不清空表单，方便继续发送
+                } else {
+                    showAlert('sendAlert', data.error || '消息发送失败', 'danger');
+                }
+            })
+            .catch(error => {
+                console.error('发送消息失败:', error);
+                showAlert('sendAlert', '网络错误，请重试', 'danger');
+            });
+        }
+        
+        // 群发消息
+        function broadcastMessage() {
+            const botName = document.getElementById('broadcastBotSelect').value;
+            const adminId = document.getElementById('broadcastAdminId').value;
+            const text = document.getElementById('broadcastText').value;
+            const fileType = document.getElementById('broadcastFileType').value;
+            const fileUrl = document.getElementById('broadcastFileUrl').value;
+            
+            if (!botName || !adminId || !text) {
+                showAlert('broadcastAlert', '请填写完整信息', 'danger');
+                return;
+            }
+            
+            const data = {
+                api_pass: API_PASS,
+                bot_name: botName,
+                admin_id: adminId,
+                text
+            };
+            
+            if (fileType && fileUrl) {
+                data.fileType = fileType;
+                data.fileUrl = fileUrl;
+            }
+            
+            showAlert('broadcastAlert', '正在群发，这可能需要一些时间...', 'info');
+            
+            fetch(`${API_URL}/api/broadcast`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(data)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.ok) {
+                    let successMessage = `群发消息已发送给 ${data.count} 位用户！`;
+                    
+                    // 检查是否有发送失败的警告
+                    if (data.warnings && data.warnings.length > 0) {
+                        successMessage += `<br><br><strong>警告:</strong><br>${data.warnings.join('<br>')}`;
+                        showAlert('broadcastAlert', successMessage, 'warning');
+                    } else {
+                        showAlert('broadcastAlert', successMessage, 'success');
+                    }
+                    
+                    // 不清空表单，方便继续发送
+                } else {
+                    showAlert('broadcastAlert', data.error || '群发消息失败', 'danger');
+                }
+            })
+            .catch(error => {
+                console.error('群发消息失败:', error);
+                showAlert('broadcastAlert', '网络错误，请重试', 'danger');
+            });
+        }
+        
+        // 加载关键词列表
+        function loadKeywords() {
+            const botName = document.getElementById('keywordBotSelect').value;
+            if (!botName) {
+                document.getElementById('keywordList').innerHTML = '<div class="alert alert-info">请选择一个Bot</div>';
+                return;
+            }
+            
+            fetch(`${API_URL}/api/keywords?bot_name=${encodeURIComponent(botName)}`)
+            .then(response => response.json())
+            .then(data => {
+                const keywordList = document.getElementById('keywordList');
+                keywordList.innerHTML = '';
+                
+                if (data.length === 0) {
+                    keywordList.innerHTML = '<div class="alert alert-info">暂无关键词</div>';
+                    return;
+                }
+                
+                data.forEach((keyword, idx) => {
+                    const keywordDiv = document.createElement('div');
+                    keywordDiv.className = 'keyword-item';
+                    keywordDiv.innerHTML = `
+                        <p><strong>匹配类型:</strong> ${keyword.type === 'equal' ? '完全匹配' : '包含关键词'}</p>
+                        <p><strong>关键词:</strong> ${keyword.keyword}</p>
+                        <p><strong>回复:</strong> ${keyword.reply}</p>
+                        <button class="btn btn-sm btn-danger delete-keyword" data-idx="${idx}">删除</button>
+                    `;
+                    keywordList.appendChild(keywordDiv);
+                    
+                    // 添加删除按钮事件
+                    const deleteBtn = keywordDiv.querySelector('.delete-keyword');
+                    deleteBtn.addEventListener('click', function() {
+                        const idxToDelete = this.getAttribute('data-idx');
+                        showDeleteKeywordModal(() => deleteKeyword(botName, idxToDelete));
+                    });
+                });
+            })
+            .catch(error => {
+                console.error('加载关键词列表失败:', error);
+                document.getElementById('keywordList').innerHTML = '<div class="alert alert-danger">加载关键词列表失败</div>';
+            });
+        }
+        
+        // 添加关键词
+        function addKeyword() {
+            const botName = document.getElementById('keywordBotSelect').value;
+            const type = document.getElementById('keywordType').value;
+            const keyword = document.getElementById('keyword').value;
+            const reply = document.getElementById('keywordReply').value;
+            
+            if (!botName || !type || !keyword || !reply) {
+                showAlert('keywordAlert', '请填写完整信息', 'danger');
+                return;
+            }
+            
+            fetch(`${API_URL}/api/keywords`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    api_pass: API_PASS,
+                    bot_name: botName,
+                    type,
+                    keyword,
+                    reply
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.ok) {
+                    showAlert('keywordAlert', '关键词添加成功！', 'success');
+                    document.getElementById('keyword').value = '';
+                    document.getElementById('keywordReply').value = '';
+                    loadKeywords();
+                } else {
+                    showAlert('keywordAlert', data.error || '关键词添加失败', 'danger');
+                }
+            })
+            .catch(error => {
+                console.error('添加关键词失败:', error);
+                showAlert('keywordAlert', '网络错误，请重试', 'danger');
+            });
+        }
+        
+        // 删除关键词
+        function deleteKeyword(botName, idx) {
+            fetch(`${API_URL}/api/keywords`, {
+                method: 'DELETE',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    api_pass: API_PASS,
+                    bot_name: botName,
+                    idx: parseInt(idx)
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.ok) {
+                    showAlert('keywordAlert', '关键词删除成功！', 'success');
+                    loadKeywords();
+                } else {
+                    showAlert('keywordAlert', data.error || '关键词删除失败', 'danger');
+                }
+            })
+            .catch(error => {
+                console.error('删除关键词失败:', error);
+                showAlert('keywordAlert', '网络错误，请重试', 'danger');
+            });
+        }
+        
+        // 加载启动消息
+        function loadStartMsg() {
+            const botName = document.getElementById('startmsgBotSelect').value;
+            if (!botName) {
+                resetStartMsgForm();
+                return;
+            }
+            
+            fetch(`${API_URL}/api/startmsg?bot_name=${encodeURIComponent(botName)}`)
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('startmsgType').value = data.type || 'none';
+                document.getElementById('startmsgFileUrl').value = data.fileUrl || '';
+                document.getElementById('startmsgText').value = data.caption || '欢迎使用本机器人！';
+                
+                toggleStartMsgFileUrl();
+                previewStartMsgImage();
+            })
+            .catch(error => {
+                console.error('加载启动消息失败:', error);
+                showAlert('startmsgAlert', '加载启动消息失败', 'danger');
+                resetStartMsgForm();
+            });
+        }
+        
+        // 重置启动消息表单
+        function resetStartMsgForm() {
+            document.getElementById('startmsgType').value = 'none';
+            document.getElementById('startmsgFileUrl').value = '';
+            document.getElementById('startmsgText').value = '欢迎使用本机器人！';
+            toggleStartMsgFileUrl();
+        }
+        
+        // 切换启动消息文件URL输入框
+        function toggleStartMsgFileUrl() {
+            const type = document.getElementById('startmsgType').value;
+            const fileUrlGroup = document.getElementById('startmsgFileUrlGroup');
+            const previewGroup = document.getElementById('startmsgPreviewGroup');
+            
+            if (type === 'photo') {
+                fileUrlGroup.style.display = 'block';
+                previewGroup.style.display = 'block';
+            } else {
+                fileUrlGroup.style.display = 'none';
+                previewGroup.style.display = 'none';
+            }
+        }
+        
+        // 预览启动消息图片
+        function previewStartMsgImage() {
+            const fileUrl = document.getElementById('startmsgFileUrl').value;
+            const preview = document.getElementById('startMessagePreview');
+            
+            if (fileUrl && document.getElementById('startmsgType').value === 'photo') {
+                // 尝试预览图片
+                if (fileUrl.startsWith('http')) {
+                    preview.src = fileUrl;
+                    preview.classList.remove('d-none');
+                } else {
+                    // 如果是文件ID，无法预览
+                    preview.classList.add('d-none');
+                }
+            } else {
+                preview.classList.add('d-none');
+            }
+        }
+        
+        // 保存启动消息
+        function saveStartMsg() {
+            const botName = document.getElementById('startmsgBotSelect').value;
+            const type = document.getElementById('startmsgType').value;
+            const fileUrl = document.getElementById('startmsgFileUrl').value;
+            const caption = document.getElementById('startmsgText').value;
+            
+            if (!botName) {
+                showAlert('startmsgAlert', '请选择Bot', 'danger');
+                return;
+            }
+            
+            if (type === 'photo' && !fileUrl) {
+                showAlert('startmsgAlert', '请填写图片URL', 'danger');
+                return;
+            }
+            
+            fetch(`${API_URL}/api/startmsg`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    api_pass: API_PASS,
+                    bot_name: botName,
+                    type,
+                    fileUrl,
+                    caption
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.ok) {
+                    showAlert('startmsgAlert', '启动消息设置成功！', 'success');
+                } else {
+                    showAlert('startmsgAlert', data.error || '启动消息设置失败', 'danger');
+                }
+            })
+            .catch(error => {
+                console.error('设置启动消息失败:', error);
+                showAlert('startmsgAlert', '网络错误，请重试', 'danger');
+            });
+        }
+        
+        // 显示提示信息
+        function showAlert(elementId, message, type) {
+            const alert = document.getElementById(elementId);
+            alert.innerHTML = message;
+            alert.className = `alert alert-${type}`;
+            alert.classList.remove('hidden');
+            
+            // 5秒后自动隐藏成功消息
+            if (type === 'success') {
+                setTimeout(() => {
+                    alert.classList.add('hidden');
+                }, 5000);
+            }
+        }
+    </script>
+</body>
+</html>
