@@ -3,883 +3,791 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Telegram Bot 多Bot管理后台</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <title>Telegram Bot 管理后台</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css">
     <style>
         body {
-            padding-top: 20px;
-            padding-bottom: 50px;
-        }
-        .bot-section {
-            margin-bottom: 40px;
-        }
-        .hidden {
-            display: none;
-        }
-        .bot-item {
-            margin-bottom: 10px;
-        }
-        .delete-btn {
-            margin-left: 10px;
+            background-color: #f8f9fa;
+            font-family: Arial, sans-serif;
         }
         .login-container {
             max-width: 400px;
             margin: 100px auto;
-            padding: 20px;
-            border-radius: 5px;
-            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            padding: 30px;
+            background-color: #fff;
+            border-radius: 10px;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.1);
         }
-        .loading {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(255,255,255,0.8);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            z-index: 9999;
+        .main-container {
+            max-width: 1200px;
+            margin: 30px auto;
+            padding: 20px;
+            background-color: #fff;
+            border-radius: 10px;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.1);
+        }
+        h1, h2 {
+            text-align: center;
+            margin-bottom: 25px;
+            color: #0d6efd;
+        }
+        .form-control {
+            margin-bottom: 15px;
+        }
+        .alert {
+            margin-top: 15px;
+            display: none;
+        }
+        .bot-card {
+            margin-bottom: 20px;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 15px;
+        }
+        .loader {
+            border: 5px solid #f3f3f3;
+            border-top: 5px solid #0d6efd;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+            display: none;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .nav-tabs {
+            margin-bottom: 20px;
+        }
+        .tab-pane {
+            padding: 15px;
         }
         .keyword-item {
-            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 5px;
             padding: 10px;
             margin-bottom: 10px;
-            border-radius: 5px;
-            position: relative;
-        }
-        .keyword-delete-btn {
-            position: absolute;
-            top: 10px;
-            right: 10px;
         }
     </style>
 </head>
 <body>
-
-<!-- 登录页面 -->
-<div id="loginPage" class="login-container">
-    <h3 class="text-center mb-4">Telegram Bot 管理后台登录</h3>
-    <div class="mb-3">
-        <label class="form-label">管理密码</label>
-        <input type="password" class="form-control" id="password">
-    </div>
-    <button class="btn btn-primary w-100" onclick="login()">登录</button>
-    <div class="alert alert-danger mt-3 hidden" id="loginError">密码错误，请重试</div>
-</div>
-
-<!-- 管理页面 -->
-<div id="adminPage" class="container hidden">
-    <h1 class="mb-4 text-center">Telegram Bot 多Bot管理后台</h1>
-    
-    <div class="bot-section">
-        <h2>Bot配置</h2>
+    <!-- 登录界面 -->
+    <div id="loginPage" class="login-container">
+        <h1>Telegram Bot 管理后台登录</h1>
         <div class="mb-3">
-            <label class="form-label">Bot名称(用户名)</label>
-            <input type="text" class="form-control" id="botName">
+            <label for="password" class="form-label">管理密码</label>
+            <input type="password" class="form-control" id="password">
         </div>
-        <div class="mb-3">
-            <label class="form-label">Bot Token</label>
-            <input type="text" class="form-control" id="botToken">
-        </div>
-        <div class="mb-3">
-            <label class="form-label">管理员ID(多个用英文逗号分隔)</label>
-            <input type="text" class="form-control" id="adminIds">
-        </div>
-        <button class="btn btn-primary" onclick="addBot()">添加/更新Bot</button>
-        <button class="btn btn-secondary ms-2" onclick="refreshBots()">刷新Bot列表</button>
+        <button id="loginBtn" class="btn btn-primary w-100">登录</button>
+        <div id="loginAlert" class="alert alert-danger"></div>
+        <div id="loginLoader" class="loader"></div>
     </div>
 
-    <hr>
-
-    <div class="bot-section">
-        <h2>Bot列表</h2>
-        <div id="botList" class="list-group mt-3"></div>
-    </div>
-
-    <hr>
-
-    <div class="bot-section">
-        <h2>客户ID列表</h2>
-        <div class="mb-3">
-            <select class="form-select" id="customerBotSelect"></select>
-        </div>
-        <button class="btn btn-info" onclick="loadCustomers()">刷新客户ID</button>
-        <div id="customerList" class="mt-3"></div>
-    </div>
-
-    <hr>
-
-    <div class="bot-section">
-        <h2>发送消息（单发）</h2>
-        <div class="mb-3">
-            <label class="form-label">选择Bot</label>
-            <select class="form-select" id="sendBotSelect"></select>
-        </div>
-        <div class="mb-3">
-            <label class="form-label">管理员ID</label>
-            <input type="text" class="form-control" id="senderAdminId">
-        </div>
-        <div class="mb-3">
-            <label class="form-label">客户ID(可多选,用逗号分隔)</label>
-            <input type="text" class="form-control" id="receiverIds">
-        </div>
-        <div class="mb-3">
-            <label class="form-label">内容</label>
-            <textarea class="form-control" id="messageContent" rows="3"></textarea>
-        </div>
-        <div class="mb-3">
-            <label class="form-label">文件类型（可选）</label>
-            <select class="form-select" id="fileType">
-                <option value="">无文件</option>
-                <option value="photo">图片</option>
-                <option value="video">视频</option>
-                <option value="document">文档</option>
-            </select>
-        </div>
-        <div class="mb-3">
-            <label class="form-label">文件URL（可选）</label>
-            <input type="text" class="form-control" id="fileUrl">
-        </div>
-        <button class="btn btn-primary" onclick="sendMessage()">发送</button>
-    </div>
-
-    <hr>
-
-    <div class="bot-section">
-        <h2>群发通知</h2>
-        <div class="mb-3">
-            <label class="form-label">选择Bot</label>
-            <select class="form-select" id="broadcastBotSelect"></select>
-        </div>
-        <div class="mb-3">
-            <label class="form-label">管理员ID</label>
-            <input type="text" class="form-control" id="broadcastAdminId">
-        </div>
-        <div class="mb-3">
-            <label class="form-label">内容</label>
-            <textarea class="form-control" id="broadcastContent" rows="3"></textarea>
-        </div>
-        <div class="mb-3">
-            <label class="form-label">文件类型（可选）</label>
-            <select class="form-select" id="broadcastFileType">
-                <option value="">无文件</option>
-                <option value="photo">图片</option>
-                <option value="video">视频</option>
-                <option value="document">文档</option>
-            </select>
-        </div>
-        <div class="mb-3">
-            <label class="form-label">文件URL（可选）</label>
-            <input type="text" class="form-control" id="broadcastFileUrl">
-        </div>
-        <button class="btn btn-danger" onclick="broadcast()">群发</button>
-    </div>
-
-    <hr>
-
-    <div class="bot-section">
-        <h2>/start 启动消息设置</h2>
-        <div class="mb-3">
-            <label class="form-label">选择Bot</label>
-            <select class="form-select" id="startmsgBotSelect"></select>
-        </div>
-        <div class="mb-3">
-            <label class="form-label">消息类型</label>
-            <select class="form-select" id="startmsgType">
-                <option value="none">纯文字</option>
-                <option value="photo">图片+文字</option>
-            </select>
-        </div>
-        <div class="mb-3">
-            <label class="form-label">文字内容</label>
-            <textarea class="form-control" id="startmsgText" rows="3"></textarea>
-        </div>
-        <div class="mb-3" id="startmsgFileUrlContainer">
-            <label class="form-label">图片URL（如选择图片类型）</label>
-            <input type="text" class="form-control" id="startmsgFileUrl">
-        </div>
-        <button class="btn btn-primary" onclick="saveStartMsg()">保存设置</button>
-        <button class="btn btn-info ms-2" onclick="loadStartMsg()">加载当前设置</button>
-    </div>
-    
-    <hr>
-    
-    <div class="bot-section">
-        <h2>关键词自动回复设置</h2>
-        <div class="mb-3">
-            <label class="form-label">选择Bot</label>
-            <select class="form-select" id="keywordBotSelect"></select>
-            <button class="btn btn-info mt-2" onclick="loadKeywords()">加载关键词</button>
-        </div>
+    <!-- 主界面 -->
+    <div id="mainPage" class="main-container" style="display:none;">
+        <h1>Telegram Bot 管理后台</h1>
         
-        <div id="keywordsList" class="mt-3"></div>
+        <ul class="nav nav-tabs" id="botTabs">
+            <li class="nav-item">
+                <a class="nav-link active" data-bs-toggle="tab" href="#botManagement">Bot管理</a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" data-bs-toggle="tab" href="#keywordReply">关键词回复</a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" data-bs-toggle="tab" href="#startMsg">启动消息设置</a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" data-bs-toggle="tab" href="#broadcastMsg">群发通知</a>
+            </li>
+            <li class="nav-item ms-auto">
+                <button id="logoutBtn" class="btn btn-outline-danger btn-sm">登出</button>
+            </li>
+        </ul>
         
-        <div class="card mt-4">
-            <div class="card-header">添加新关键词</div>
-            <div class="card-body">
-                <div class="mb-3">
-                    <label class="form-label">匹配类型</label>
-                    <select class="form-select" id="keywordType">
-                        <option value="equal">完全匹配</option>
-                        <option value="contain">包含匹配</option>
-                    </select>
+        <div class="tab-content">
+            <!-- Bot管理面板 -->
+            <div class="tab-pane fade show active" id="botManagement">
+                <h2>Bot配置管理</h2>
+                
+                <div id="botList" class="mb-4">
+                    <!-- Bot列表将通过JavaScript动态加载 -->
                 </div>
-                <div class="mb-3">
-                    <label class="form-label">关键词</label>
-                    <input type="text" class="form-control" id="keywordText">
+                
+                <div class="card">
+                    <div class="card-header">添加新Bot</div>
+                    <div class="card-body">
+                        <form id="addBotForm">
+                            <div class="mb-3">
+                                <label for="botName" class="form-label">Bot名称（自定义标识）</label>
+                                <input type="text" class="form-control" id="botName" required>
+                            </div>
+                            <div class="mb-3">
+                                <label for="botToken" class="form-label">Bot Token (从BotFather获取)</label>
+                                <input type="text" class="form-control" id="botToken" required>
+                            </div>
+                            <div class="mb-3">
+                                <label for="botAdmins" class="form-label">管理员ID (多个请用逗号分隔)</label>
+                                <input type="text" class="form-control" id="botAdmins" required>
+                                <small class="text-muted">可从 @userinfobot 获取你的Telegram ID</small>
+                            </div>
+                            <button type="submit" class="btn btn-primary">添加</button>
+                        </form>
+                    </div>
                 </div>
-                <div class="mb-3">
-                    <label class="form-label">回复内容</label>
-                    <textarea class="form-control" id="keywordReply" rows="3"></textarea>
+            </div>
+            
+            <!-- 关键词回复面板 -->
+            <div class="tab-pane fade" id="keywordReply">
+                <div class="d-flex justify-content-between mb-3">
+                    <h2>关键词自动回复</h2>
+                    <div>
+                        <select id="keywordBotSelector" class="form-select">
+                            <!-- Bot选择器将通过JavaScript动态加载 -->
+                        </select>
+                    </div>
                 </div>
-                <button class="btn btn-success" onclick="addKeyword()">添加关键词</button>
+                
+                <div id="keywordList" class="mb-4">
+                    <!-- 关键词列表将通过JavaScript动态加载 -->
+                </div>
+                
+                <div class="card">
+                    <div class="card-header">添加新关键词</div>
+                    <div class="card-body">
+                        <form id="addKeywordForm">
+                            <div class="mb-3">
+                                <label class="form-label">匹配类型</label>
+                                <div>
+                                    <div class="form-check form-check-inline">
+                                        <input class="form-check-input" type="radio" name="matchType" id="exactMatch" value="equal" checked>
+                                        <label class="form-check-label" for="exactMatch">完全匹配</label>
+                                    </div>
+                                    <div class="form-check form-check-inline">
+                                        <input class="form-check-input" type="radio" name="matchType" id="containMatch" value="contain">
+                                        <label class="form-check-label" for="containMatch">包含匹配</label>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="mb-3">
+                                <label for="keyword" class="form-label">触发关键词</label>
+                                <input type="text" class="form-control" id="keyword" required>
+                            </div>
+                            <div class="mb-3">
+                                <label for="replyText" class="form-label">自动回复内容</label>
+                                <textarea class="form-control" id="replyText" rows="3" required></textarea>
+                            </div>
+                            <button type="submit" class="btn btn-primary">添加</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 启动消息设置面板 -->
+            <div class="tab-pane fade" id="startMsg">
+                <div class="d-flex justify-content-between mb-3">
+                    <h2>启动消息设置</h2>
+                    <div>
+                        <select id="startMsgBotSelector" class="form-select">
+                            <!-- Bot选择器将通过JavaScript动态加载 -->
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="card">
+                    <div class="card-header">设置/start命令回复</div>
+                    <div class="card-body">
+                        <form id="setStartMsgForm">
+                            <div class="mb-3">
+                                <label class="form-label">消息类型</label>
+                                <div>
+                                    <div class="form-check form-check-inline">
+                                        <input class="form-check-input" type="radio" name="msgType" id="textMsg" value="none" checked>
+                                        <label class="form-check-label" for="textMsg">纯文本</label>
+                                    </div>
+                                    <div class="form-check form-check-inline">
+                                        <input class="form-check-input" type="radio" name="msgType" id="photoMsg" value="photo">
+                                        <label class="form-check-label" for="photoMsg">图片</label>
+                                    </div>
+                                </div>
+                            </div>
+                            <div id="fileUrlField" class="mb-3" style="display:none;">
+                                <label for="fileUrl" class="form-label">图片URL</label>
+                                <input type="text" class="form-control" id="fileUrl">
+                                <small class="text-muted">输入可公开访问的图片URL</small>
+                            </div>
+                            <div class="mb-3">
+                                <label for="startMsgText" class="form-label">消息内容</label>
+                                <textarea class="form-control" id="startMsgText" rows="3"></textarea>
+                            </div>
+                            <button type="submit" class="btn btn-primary">保存</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 群发通知面板 -->
+            <div class="tab-pane fade" id="broadcastMsg">
+                <div class="d-flex justify-content-between mb-3">
+                    <h2>群发消息通知</h2>
+                    <div>
+                        <select id="broadcastBotSelector" class="form-select">
+                            <!-- Bot选择器将通过JavaScript动态加载 -->
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="card">
+                    <div class="card-header">向所有用户发送消息</div>
+                    <div class="card-body">
+                        <form id="broadcastForm">
+                            <div class="mb-3">
+                                <label class="form-label">消息类型</label>
+                                <div>
+                                    <div class="form-check form-check-inline">
+                                        <input class="form-check-input" type="radio" name="broadcastType" id="textBroadcast" value="text" checked>
+                                        <label class="form-check-label" for="textBroadcast">纯文本</label>
+                                    </div>
+                                    <div class="form-check form-check-inline">
+                                        <input class="form-check-input" type="radio" name="broadcastType" id="photoBroadcast" value="photo">
+                                        <label class="form-check-label" for="photoBroadcast">图片</label>
+                                    </div>
+                                    <div class="form-check form-check-inline">
+                                        <input class="form-check-input" type="radio" name="broadcastType" id="docBroadcast" value="document">
+                                        <label class="form-check-label" for="docBroadcast">文件</label>
+                                    </div>
+                                </div>
+                            </div>
+                            <div id="broadcastFileField" class="mb-3" style="display:none;">
+                                <label for="broadcastFileUrl" class="form-label">文件/图片URL</label>
+                                <input type="text" class="form-control" id="broadcastFileUrl">
+                                <small class="text-muted">输入可公开访问的URL</small>
+                            </div>
+                            <div class="mb-3">
+                                <label for="broadcastText" class="form-label">消息内容</label>
+                                <textarea class="form-control" id="broadcastText" rows="3" required></textarea>
+                            </div>
+                            <button type="submit" class="btn btn-primary">发送</button>
+                            <div id="broadcastResult" class="mt-3"></div>
+                        </form>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
 
-    <div class="mt-5 text-center">
-        <button class="btn btn-outline-secondary" onclick="logout()">退出登录</button>
-    </div>
-</div>
-
-<div id="loading" class="loading hidden">
-    <div class="spinner-border text-primary" role="status">
-        <span class="visually-hidden">加载中...</span>
-    </div>
-</div>
-
-<script>
-    let API_PASS = '';
-    
-    // 页面加载时检查登录状态
-    window.onload = function() {
-        const savedApiPass = localStorage.getItem('api_pass');
-        if (savedApiPass) {
-            API_PASS = savedApiPass;
-            document.getElementById('loginPage').classList.add('hidden');
-            document.getElementById('adminPage').classList.remove('hidden');
-            refreshBots();
-        }
-    };
-    
-    // 登录功能
-    async function login() {
-        showLoading();
-        const password = document.getElementById('password').value;
-        try {
-            const response = await fetch('/api/login', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({password})
-            });
-            const data = await response.json();
-            if (data.ok) {
-                API_PASS = password;
-                localStorage.setItem('api_pass', password);
-                document.getElementById('loginPage').classList.add('hidden');
-                document.getElementById('adminPage').classList.remove('hidden');
-                refreshBots();
-            } else {
-                document.getElementById('loginError').classList.remove('hidden');
-                setTimeout(() => {
-                    document.getElementById('loginError').classList.add('hidden');
-                }, 3000);
-            }
-        } catch (error) {
-            alert('登录失败: ' + error.message);
-        } finally {
-            hideLoading();
-        }
-    }
-    
-    // 退出登录
-    function logout() {
-        localStorage.removeItem('api_pass');
-        API_PASS = '';
-        document.getElementById('loginPage').classList.remove('hidden');
-        document.getElementById('adminPage').classList.add('hidden');
-    }
-    
-    // 添加或更新Bot
-    async function addBot() {
-        showLoading();
-        const bot_name = document.getElementById('botName').value;
-        const token = document.getElementById('botToken').value;
-        const adminIdsStr = document.getElementById('adminIds').value;
-        const admins = adminIdsStr.split(',').map(id => id.trim());
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // 全局变量
+        let adminPassword = '';
+        let selectedBot = '';
+        let botList = {};
         
-        if (!bot_name || !token || admins.length === 0) {
-            alert('请填写完整信息');
-            hideLoading();
-            return;
+        // 工具函数
+        function showError(elementId, message) {
+            const el = document.getElementById(elementId);
+            el.textContent = message;
+            el.style.display = 'block';
         }
         
-        try {
-            const response = await fetch('/api/bots', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    api_pass: API_PASS,
-                    bot_name,
-                    token,
-                    admins
-                })
-            });
-            const data = await response.json();
-            if (data.ok) {
-                alert('Bot已添加/更新成功');
-                refreshBots();
-                document.getElementById('botName').value = '';
-                document.getElementById('botToken').value = '';
-                document.getElementById('adminIds').value = '';
-            } else if (data.warning) {
-                alert('提示: ' + data.warning);
-                refreshBots();
-            } else {
-                alert('失败: ' + data.error);
-            }
-        } catch (error) {
-            alert('添加/更新Bot失败: ' + error.message);
-        } finally {
-            hideLoading();
+        function hideError(elementId) {
+            document.getElementById(elementId).style.display = 'none';
         }
-    }
-    
-    // 刷新Bot列表
-    async function refreshBots() {
-        showLoading();
-        try {
-            const response = await fetch('/api/bots');
-            const bots = await response.json();
+        
+        function showLoader(elementId) {
+            document.getElementById(elementId).style.display = 'block';
+        }
+        
+        function hideLoader(elementId) {
+            document.getElementById(elementId).style.display = 'none';
+        }
+        
+        async function callAPI(endpoint, method = 'GET', data = null) {
+            const options = {
+                method,
+                headers: { 'Content-Type': 'application/json' }
+            };
             
-            // 更新Bot列表
-            const botListEl = document.getElementById('botList');
-            botListEl.innerHTML = '';
+            if (data) {
+                options.body = JSON.stringify(data);
+            }
             
-            const customerBotSelectEl = document.getElementById('customerBotSelect');
-            const sendBotSelectEl = document.getElementById('sendBotSelect');
-            const broadcastBotSelectEl = document.getElementById('broadcastBotSelect');
-            const startmsgBotSelectEl = document.getElementById('startmsgBotSelect');
-            const keywordBotSelectEl = document.getElementById('keywordBotSelect');
+            try {
+                const response = await fetch(`/api${endpoint}`, options);
+                return await response.json();
+            } catch (error) {
+                console.error('API错误:', error);
+                throw new Error(`API调用失败: ${error.message}`);
+            }
+        }
+        
+        // 页面加载完成后执行
+        document.addEventListener('DOMContentLoaded', function() {
+            // 检查是否已登录
+            const savedPassword = localStorage.getItem('adminPassword');
+            if (savedPassword) {
+                adminPassword = savedPassword;
+                checkLogin();
+            }
             
-            customerBotSelectEl.innerHTML = '';
-            sendBotSelectEl.innerHTML = '';
-            broadcastBotSelectEl.innerHTML = '';
-            startmsgBotSelectEl.innerHTML = '';
-            keywordBotSelectEl.innerHTML = '';
+            // 登录表单提交处理
+            document.getElementById('loginBtn').addEventListener('click', login);
+            document.getElementById('password').addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    login();
+                }
+            });
             
-            for (const [name, config] of Object.entries(bots)) {
-                const botItem = document.createElement('div');
-                botItem.className = 'bot-item';
-                botItem.innerHTML = `
-                    <strong>${name}</strong>
-                    Token: ${maskToken(config.token)}... 管理员: ${config.admins.join(', ')}
-                    <button class="btn btn-sm btn-danger delete-btn" onclick="deleteBot('${name}')">删除</button>
+            // 登出按钮处理
+            document.getElementById('logoutBtn').addEventListener('click', function() {
+                localStorage.removeItem('adminPassword');
+                location.reload();
+            });
+            
+            // Bot添加表单处理
+            document.getElementById('addBotForm').addEventListener('submit', function(e) {
+                e.preventDefault();
+                addBot();
+            });
+            
+            // 关键词表单处理
+            document.getElementById('addKeywordForm').addEventListener('submit', function(e) {
+                e.preventDefault();
+                addKeyword();
+            });
+            
+            // 启动消息表单处理
+            document.getElementById('setStartMsgForm').addEventListener('submit', function(e) {
+                e.preventDefault();
+                setStartMsg();
+            });
+            
+            // 消息类型切换
+            document.querySelectorAll('input[name="msgType"]').forEach(function(radio) {
+                radio.addEventListener('change', function() {
+                    document.getElementById('fileUrlField').style.display = 
+                        this.value === 'photo' ? 'block' : 'none';
+                });
+            });
+            
+            // 群发消息表单处理
+            document.getElementById('broadcastForm').addEventListener('submit', function(e) {
+                e.preventDefault();
+                broadcastMessage();
+            });
+            
+            // 群发消息类型切换
+            document.querySelectorAll('input[name="broadcastType"]').forEach(function(radio) {
+                radio.addEventListener('change', function() {
+                    document.getElementById('broadcastFileField').style.display = 
+                        this.value !== 'text' ? 'block' : 'none';
+                });
+            });
+            
+            // Bot选择器变化处理
+            document.getElementById('keywordBotSelector').addEventListener('change', function() {
+                selectedBot = this.value;
+                loadKeywords();
+            });
+            
+            document.getElementById('startMsgBotSelector').addEventListener('change', function() {
+                selectedBot = this.value;
+                loadStartMsg();
+            });
+            
+            document.getElementById('broadcastBotSelector').addEventListener('change', function() {
+                selectedBot = this.value;
+            });
+        });
+        
+        // 登录函数
+        async function login() {
+            const password = document.getElementById('password').value;
+            if (!password) {
+                showError('loginAlert', '请输入密码');
+                return;
+            }
+            
+            hideError('loginAlert');
+            showLoader('loginLoader');
+            
+            try {
+                const result = await callAPI('/login', 'POST', { password });
+                if (result.ok) {
+                    adminPassword = password;
+                    localStorage.setItem('adminPassword', password);
+                    document.getElementById('loginPage').style.display = 'none';
+                    document.getElementById('mainPage').style.display = 'block';
+                    loadBots();
+                } else {
+                    showError('loginAlert', result.error || '密码错误，请重试');
+                }
+            } catch (error) {
+                showError('loginAlert', '网络错误，请重试');
+            } finally {
+                hideLoader('loginLoader');
+            }
+        }
+        
+        // 检查登录状态
+        async function checkLogin() {
+            try {
+                const result = await callAPI('/login', 'POST', { password: adminPassword });
+                if (result.ok) {
+                    document.getElementById('loginPage').style.display = 'none';
+                    document.getElementById('mainPage').style.display = 'block';
+                    loadBots();
+                } else {
+                    localStorage.removeItem('adminPassword');
+                }
+            } catch (error) {
+                console.error('登录检查失败:', error);
+                localStorage.removeItem('adminPassword');
+            }
+        }
+        
+        // 加载Bot列表
+        async function loadBots() {
+            try {
+                botList = await callAPI('/bots');
+                updateBotList();
+                updateBotSelectors();
+                
+                // 默认选择第一个Bot
+                const botNames = Object.keys(botList);
+                if (botNames.length > 0) {
+                    selectedBot = botNames[0];
+                    loadKeywords();
+                    loadStartMsg();
+                    
+                    // 更新选择器
+                    document.getElementById('keywordBotSelector').value = selectedBot;
+                    document.getElementById('startMsgBotSelector').value = selectedBot;
+                    document.getElementById('broadcastBotSelector').value = selectedBot;
+                }
+            } catch (error) {
+                console.error('加载Bot列表失败:', error);
+            }
+        }
+        
+        // 更新Bot列表显示
+        function updateBotList() {
+            const container = document.getElementById('botList');
+            container.innerHTML = '';
+            
+            const botNames = Object.keys(botList);
+            if (botNames.length === 0) {
+                container.innerHTML = '<div class="alert alert-info">没有配置的Bot，请添加一个</div>';
+                return;
+            }
+            
+            botNames.forEach(name => {
+                const bot = botList[name];
+                const card = document.createElement('div');
+                card.className = 'bot-card';
+                
+                card.innerHTML = `
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <h5 class="mb-0">${name}</h5>
+                        <button class="btn btn-sm btn-danger delete-bot" data-name="${name}">删除</button>
+                    </div>
+                    <div><strong>Token:</strong> <span class="text-muted">${bot.token.substring(0, 10)}...</span></div>
+                    <div><strong>管理员:</strong> ${bot.admins.join(', ')}</div>
                 `;
-                botListEl.appendChild(botItem);
                 
-                // 添加到下拉选择框
-                const option1 = document.createElement('option');
-                option1.value = name;
-                option1.textContent = name;
-                customerBotSelectEl.appendChild(option1);
-                
-                const option2 = document.createElement('option');
-                option2.value = name;
-                option2.textContent = name;
-                sendBotSelectEl.appendChild(option2);
-                
-                const option3 = document.createElement('option');
-                option3.value = name;
-                option3.textContent = name;
-                broadcastBotSelectEl.appendChild(option3);
-                
-                const option4 = document.createElement('option');
-                option4.value = name;
-                option4.textContent = name;
-                startmsgBotSelectEl.appendChild(option4);
-                
-                const option5 = document.createElement('option');
-                option5.value = name;
-                option5.textContent = name;
-                keywordBotSelectEl.appendChild(option5);
-            }
+                container.appendChild(card);
+            });
             
-            // 如果没有bot，提示用户添加
-            if (Object.keys(bots).length === 0) {
-                botListEl.innerHTML = '<div class="alert alert-info">暂无Bot，请添加</div>';
-            }
-            
-        } catch (error) {
-            alert('加载Bot列表失败: ' + error.message);
-        } finally {
-            hideLoading();
-        }
-    }
-    
-    // 删除Bot
-    async function deleteBot(botName) {
-        if (!confirm(`确定要删除Bot "${botName}" 吗?`)) {
-            return;
+            // 添加删除事件监听
+            document.querySelectorAll('.delete-bot').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const botName = this.getAttribute('data-name');
+                    if (confirm(`确定要删除Bot "${botName}" 吗?`)) {
+                        deleteBot(botName);
+                    }
+                });
+            });
         }
         
-        showLoading();
-        try {
-            const response = await fetch('/api/bots', {
-                method: 'DELETE',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    api_pass: API_PASS,
+        // 更新Bot选择器
+        function updateBotSelectors() {
+            const selectors = [
+                document.getElementById('keywordBotSelector'),
+                document.getElementById('startMsgBotSelector'),
+                document.getElementById('broadcastBotSelector')
+            ];
+            
+            const botNames = Object.keys(botList);
+            
+            selectors.forEach(selector => {
+                selector.innerHTML = '';
+                
+                if (botNames.length === 0) {
+                    const option = document.createElement('option');
+                    option.value = '';
+                    option.textContent = '没有可用的Bot';
+                    selector.appendChild(option);
+                    selector.disabled = true;
+                } else {
+                    selector.disabled = false;
+                    botNames.forEach(name => {
+                        const option = document.createElement('option');
+                        option.value = name;
+                        option.textContent = name;
+                        selector.appendChild(option);
+                    });
+                }
+            });
+        }
+        
+        // 添加Bot
+        async function addBot() {
+            const botName = document.getElementById('botName').value.trim();
+            const botToken = document.getElementById('botToken').value.trim();
+            const botAdmins = document.getElementById('botAdmins').value.trim().split(',').map(id => id.trim());
+            
+            try {
+                const result = await callAPI('/bots', 'POST', {
+                    api_pass: adminPassword,
+                    bot_name: botName,
+                    token: botToken,
+                    admins: botAdmins
+                });
+                
+                if (result.ok) {
+                    alert('Bot添加成功' + (result.warning ? `\n警告: ${result.warning}` : ''));
+                    document.getElementById('addBotForm').reset();
+                    loadBots();
+                } else {
+                    alert(`添加失败: ${result.error || '未知错误'}`);
+                }
+            } catch (error) {
+                alert(`添加失败: ${error.message}`);
+            }
+        }
+        
+        // 删除Bot
+        async function deleteBot(botName) {
+            try {
+                const result = await callAPI('/bots', 'DELETE', {
+                    api_pass: adminPassword,
                     bot_name: botName
-                })
-            });
-            const data = await response.json();
-            if (data.ok) {
-                alert('Bot已删除');
-                refreshBots();
-            } else {
-                alert('删除失败: ' + data.error);
+                });
+                
+                if (result.ok) {
+                    alert('Bot删除成功');
+                    loadBots();
+                } else {
+                    alert(`删除失败: ${result.error || '未知错误'}`);
+                }
+            } catch (error) {
+                alert(`删除失败: ${error.message}`);
             }
-        } catch (error) {
-            alert('删除Bot失败: ' + error.message);
-        } finally {
-            hideLoading();
-        }
-    }
-    
-    // 加载客户ID
-    async function loadCustomers() {
-        const botName = document.getElementById('customerBotSelect').value;
-        if (!botName) {
-            alert('请选择Bot');
-            return;
         }
         
-        showLoading();
-        try {
-            const response = await fetch(`/api/customers/${encodeURIComponent(botName)}`);
-            const ids = await response.json();
+        // 加载关键词列表
+        async function loadKeywords() {
+            if (!selectedBot) return;
             
-            const customerListEl = document.getElementById('customerList');
-            customerListEl.innerHTML = '';
+            try {
+                const keywords = await callAPI(`/keywords?bot_name=${selectedBot}`);
+                updateKeywordList(keywords);
+            } catch (error) {
+                console.error('加载关键词失败:', error);
+            }
+        }
+        
+        // 更新关键词列表显示
+        function updateKeywordList(keywords) {
+            const container = document.getElementById('keywordList');
+            container.innerHTML = '';
             
-            if (ids.length === 0) {
-                customerListEl.innerHTML = '<div class="alert alert-info">暂无客户</div>';
+            if (!keywords || keywords.length === 0) {
+                container.innerHTML = '<div class="alert alert-info">没有设置关键词回复，请添加</div>';
                 return;
             }
             
-            const table = document.createElement('table');
-            table.className = 'table table-striped';
-            table.innerHTML = `
-                <thead>
-                    <tr>
-                        <th>用户ID</th>
-                        <th>操作</th>
-                    </tr>
-                </thead>
-                <tbody id="customerTableBody"></tbody>
-            `;
-            customerListEl.appendChild(table);
-            
-            const tbody = document.getElementById('customerTableBody');
-            ids.forEach(id => {
-                const tr = document.createElement('tr');
-                tr.innerHTML = `
-                    <td>${id}</td>
-                    <td>
-                        <button class="btn btn-sm btn-primary" onclick="selectCustomer('${id}')">选择</button>
-                    </td>
-                `;
-                tbody.appendChild(tr);
-            });
-            
-        } catch (error) {
-            alert('加载客户ID失败: ' + error.message);
-        } finally {
-            hideLoading();
-        }
-    }
-    
-    // 选择客户
-    function selectCustomer(id) {
-        const receiverIdsEl = document.getElementById('receiverIds');
-        const currentIds = receiverIdsEl.value.split(',').map(id => id.trim()).filter(id => id);
-        if (!currentIds.includes(id)) {
-            currentIds.push(id);
-            receiverIdsEl.value = currentIds.join(', ');
-        }
-    }
-    
-    // 发送消息
-    async function sendMessage() {
-        const bot_name = document.getElementById('sendBotSelect').value;
-        const admin_id = document.getElementById('senderAdminId').value;
-        const customerIdsStr = document.getElementById('receiverIds').value;
-        const text = document.getElementById('messageContent').value;
-        const fileType = document.getElementById('fileType').value;
-        const fileUrl = document.getElementById('fileUrl').value;
-        
-        if (!bot_name || !admin_id || !customerIdsStr) {
-            alert('请填写Bot名称、管理员ID和客户ID');
-            return;
-        }
-        
-        const customer_ids = customerIdsStr.split(',').map(id => id.trim()).filter(id => id);
-        
-        if (customer_ids.length === 0) {
-            alert('请填写至少一个客户ID');
-            return;
-        }
-        
-        if (!text && (!fileType || !fileUrl)) {
-            alert('请填写消息内容或提供文件');
-            return;
-        }
-        
-        if (fileType && !fileUrl) {
-            alert('请提供文件URL');
-            return;
-        }
-        
-        showLoading();
-        try {
-            const response = await fetch('/api/send', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    api_pass: API_PASS,
-                    bot_name,
-                    admin_id,
-                    customer_ids,
-                    text,
-                    fileType: fileType || undefined,
-                    fileUrl: fileUrl || undefined
-                })
-            });
-            const data = await response.json();
-            if (data.ok) {
-                alert(`消息已发送给 ${customer_ids.length} 个用户`);
-                // 清空输入框
-                document.getElementById('messageContent').value = '';
-                document.getElementById('fileUrl').value = '';
-                document.getElementById('fileType').value = '';
-                
-                // 检查是否有警告信息
-                if (data.warnings && data.warnings.length > 0) {
-                    alert(`警告: ${data.warnings.join('\n')}`);
-                }
-            } else {
-                alert('发送失败: ' + data.error);
-            }
-        } catch (error) {
-            alert('发送消息失败: ' + error.message);
-        } finally {
-            hideLoading();
-        }
-    }
-    
-    // 群发通知
-    async function broadcast() {
-        const bot_name = document.getElementById('broadcastBotSelect').value;
-        const admin_id = document.getElementById('broadcastAdminId').value;
-        const text = document.getElementById('broadcastContent').value;
-        const fileType = document.getElementById('broadcastFileType').value;
-        const fileUrl = document.getElementById('broadcastFileUrl').value;
-        
-        if (!bot_name || !admin_id) {
-            alert('请填写Bot名称和管理员ID');
-            return;
-        }
-        
-        if (!text && (!fileType || !fileUrl)) {
-            alert('请填写消息内容或提供文件');
-            return;
-        }
-        
-        if (fileType && !fileUrl) {
-            alert('请提供文件URL');
-            return;
-        }
-        
-        if (!confirm('确定要向所有客户发送此消息吗?')) {
-            return;
-        }
-        
-        showLoading();
-        try {
-            const response = await fetch('/api/broadcast', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    api_pass: API_PASS,
-                    bot_name,
-                    admin_id,
-                    text,
-                    fileType: fileType || undefined,
-                    fileUrl: fileUrl || undefined
-                })
-            });
-            const data = await response.json();
-            if (data.ok) {
-                alert(`消息已群发给 ${data.count} 个用户`);
-                // 清空输入框
-                document.getElementById('broadcastContent').value = '';
-                document.getElementById('broadcastFileUrl').value = '';
-                document.getElementById('broadcastFileType').value = '';
-                
-                // 检查是否有警告信息
-                if (data.warnings && data.warnings.length > 0) {
-                    alert(`警告: ${data.warnings.join('\n')}`);
-                }
-            } else {
-                alert('群发失败: ' + data.error);
-            }
-        } catch (error) {
-            alert('群发消息失败: ' + error.message);
-        } finally {
-            hideLoading();
-        }
-    }
-    
-    // 加载启动消息设置
-    async function loadStartMsg() {
-        const bot_name = document.getElementById('startmsgBotSelect').value;
-        if (!bot_name) {
-            alert('请选择Bot');
-            return;
-        }
-        
-        showLoading();
-        try {
-            const response = await fetch(`/api/startmsg?bot_name=${encodeURIComponent(bot_name)}`);
-            const data = await response.json();
-            
-            document.getElementById('startmsgType').value = data.type || 'none';
-            document.getElementById('startmsgText').value = data.caption || '';
-            document.getElementById('startmsgFileUrl').value = data.fileUrl || '';
-            
-            // 根据类型显示或隐藏文件URL输入框
-            toggleStartMsgFileUrl();
-            
-        } catch (error) {
-            alert('加载启动消息设置失败: ' + error.message);
-        } finally {
-            hideLoading();
-        }
-    }
-    
-    // 保存启动消息设置
-    async function saveStartMsg() {
-        const bot_name = document.getElementById('startmsgBotSelect').value;
-        const type = document.getElementById('startmsgType').value;
-        const caption = document.getElementById('startmsgText').value;
-        const fileUrl = document.getElementById('startmsgFileUrl').value;
-        
-        if (!bot_name) {
-            alert('请选择Bot');
-            return;
-        }
-        
-        if (type === 'photo' && !fileUrl) {
-            alert('请提供图片URL');
-            return;
-        }
-        
-        showLoading();
-        try {
-            const response = await fetch('/api/startmsg', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    api_pass: API_PASS,
-                    bot_name,
-                    type,
-                    fileUrl,
-                    caption
-                })
-            });
-            const data = await response.json();
-            if (data.ok) {
-                alert('启动消息设置已保存');
-            } else {
-                alert('保存失败: ' + data.error);
-            }
-        } catch (error) {
-            alert('保存启动消息设置失败: ' + error.message);
-        } finally {
-            hideLoading();
-        }
-    }
-    
-    // 切换启动消息文件URL输入框显示
-    function toggleStartMsgFileUrl() {
-        const type = document.getElementById('startmsgType').value;
-        const container = document.getElementById('startmsgFileUrlContainer');
-        
-        if (type === 'photo') {
-            container.style.display = 'block';
-        } else {
-            container.style.display = 'none';
-        }
-    }
-    
-    // 监听启动消息类型变化
-    document.getElementById('startmsgType').addEventListener('change', toggleStartMsgFileUrl);
-    
-    // 加载关键词列表
-    async function loadKeywords() {
-        const bot_name = document.getElementById('keywordBotSelect').value;
-        if (!bot_name) {
-            alert('请选择Bot');
-            return;
-        }
-        
-        showLoading();
-        try {
-            const response = await fetch(`/api/keywords?bot_name=${encodeURIComponent(bot_name)}`);
-            const keywords = await response.json();
-            
-            const keywordsListEl = document.getElementById('keywordsList');
-            keywordsListEl.innerHTML = '';
-            
-            if (keywords.length === 0) {
-                keywordsListEl.innerHTML = '<div class="alert alert-info">暂无关键词</div>';
-                return;
-            }
-            
-            keywords.forEach((keyword, idx) => {
+            keywords.forEach((item, index) => {
                 const keywordItem = document.createElement('div');
                 keywordItem.className = 'keyword-item';
+                
                 keywordItem.innerHTML = `
-                    <h5>关键词 #${idx + 1}</h5>
-                    <p><strong>类型:</strong> ${keyword.type === 'equal' ? '完全匹配' : '包含匹配'}</p>
-                    <p><strong>关键词:</strong> ${keyword.keyword}</p>
-                    <p><strong>回复:</strong> ${keyword.reply}</p>
-                    <button class="btn btn-sm btn-danger keyword-delete-btn" onclick="deleteKeyword(${idx})">删除</button>
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <h5 class="mb-0">${item.keyword}</h5>
+                        <button class="btn btn-sm btn-danger delete-keyword" data-index="${index}">删除</button>
+                    </div>
+                    <div><strong>匹配类型:</strong> ${item.type === 'equal' ? '完全匹配' : '包含匹配'}</div>
+                    <div><strong>回复内容:</strong> ${item.reply}</div>
                 `;
-                keywordsListEl.appendChild(keywordItem);
+                
+                container.appendChild(keywordItem);
             });
             
-        } catch (error) {
-            alert('加载关键词列表失败: ' + error.message);
-        } finally {
-            hideLoading();
-        }
-    }
-    
-    // 添加关键词
-    async function addKeyword() {
-        const bot_name = document.getElementById('keywordBotSelect').value;
-        const type = document.getElementById('keywordType').value;
-        const keyword = document.getElementById('keywordText').value;
-        const reply = document.getElementById('keywordReply').value;
-        
-        if (!bot_name) {
-            alert('请选择Bot');
-            return;
+            // 添加删除事件监听
+            document.querySelectorAll('.delete-keyword').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const idx = this.getAttribute('data-index');
+                    if (confirm('确定要删除这个关键词回复吗?')) {
+                        deleteKeyword(idx);
+                    }
+                });
+            });
         }
         
-        if (!keyword || !reply) {
-            alert('请填写关键词和回复内容');
-            return;
-        }
-        
-        showLoading();
-        try {
-            const response = await fetch('/api/keywords', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    api_pass: API_PASS,
-                    bot_name,
+        // 添加关键词
+        async function addKeyword() {
+            if (!selectedBot) {
+                alert('请先选择一个Bot');
+                return;
+            }
+            
+            const type = document.querySelector('input[name="matchType"]:checked').value;
+            const keyword = document.getElementById('keyword').value.trim();
+            const reply = document.getElementById('replyText').value.trim();
+            
+            try {
+                const result = await callAPI('/keywords', 'POST', {
+                    api_pass: adminPassword,
+                    bot_name: selectedBot,
                     type,
                     keyword,
                     reply
-                })
-            });
-            const data = await response.json();
-            if (data.ok) {
-                alert('关键词已添加');
-                document.getElementById('keywordText').value = '';
-                document.getElementById('keywordReply').value = '';
-                loadKeywords();
-            } else {
-                alert('添加失败: ' + data.error);
+                });
+                
+                if (result.ok) {
+                    alert('关键词添加成功');
+                    document.getElementById('addKeywordForm').reset();
+                    document.getElementById('exactMatch').checked = true;
+                    loadKeywords();
+                } else {
+                    alert(`添加失败: ${result.error || '未知错误'}`);
+                }
+            } catch (error) {
+                alert(`添加失败: ${error.message}`);
             }
-        } catch (error) {
-            alert('添加关键词失败: ' + error.message);
-        } finally {
-            hideLoading();
-        }
-    }
-    
-    // 删除关键词
-    async function deleteKeyword(idx) {
-        if (!confirm('确定要删除这个关键词吗?')) {
-            return;
         }
         
-        const bot_name = document.getElementById('keywordBotSelect').value;
-        
-        showLoading();
-        try {
-            const response = await fetch('/api/keywords', {
-                method: 'DELETE',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    api_pass: API_PASS,
-                    bot_name,
-                    idx
-                })
-            });
-            const data = await response.json();
-            if (data.ok) {
-                alert('关键词已删除');
-                loadKeywords();
-            } else {
-                alert('删除失败: ' + data.error);
+        // 删除关键词
+        async function deleteKeyword(idx) {
+            try {
+                const result = await callAPI('/keywords', 'DELETE', {
+                    api_pass: adminPassword,
+                    bot_name: selectedBot,
+                    idx: parseInt(idx)
+                });
+                
+                if (result.ok) {
+                    alert('关键词删除成功');
+                    loadKeywords();
+                } else {
+                    alert(`删除失败: ${result.error || '未知错误'}`);
+                }
+            } catch (error) {
+                alert(`删除失败: ${error.message}`);
             }
-        } catch (error) {
-            alert('删除关键词失败: ' + error.message);
-        } finally {
-            hideLoading();
         }
-    }
-    
-    // 遮盖Token的一部分
-    function maskToken(token) {
-        if (!token) return '';
-        if (token.length <= 8) return token;
-        return token.substring(0, 8);
-    }
-    
-    // 显示加载中
-    function showLoading() {
-        document.getElementById('loading').classList.remove('hidden');
-    }
-    
-    // 隐藏加载中
-    function hideLoading() {
-        document.getElementById('loading').classList.add('hidden');
-    }
-</script>
-
+        
+        // 加载启动消息
+        async function loadStartMsg() {
+            if (!selectedBot) return;
+            
+            try {
+                const startMsg = await callAPI(`/startmsg?bot_name=${selectedBot}`);
+                
+                // 更新表单
+                if (startMsg.type === 'photo') {
+                    document.getElementById('photoMsg').checked = true;
+                    document.getElementById('fileUrlField').style.display = 'block';
+                    document.getElementById('fileUrl').value = startMsg.fileUrl || '';
+                } else {
+                    document.getElementById('textMsg').checked = true;
+                    document.getElementById('fileUrlField').style.display = 'none';
+                    document.getElementById('fileUrl').value = '';
+                }
+                
+                document.getElementById('startMsgText').value = startMsg.caption || '';
+            } catch (error) {
+                console.error('加载启动消息失败:', error);
+            }
+        }
+        
+        // 设置启动消息
+        async function setStartMsg() {
+            if (!selectedBot) {
+                alert('请先选择一个Bot');
+                return;
+            }
+            
+            const type = document.querySelector('input[name="msgType"]:checked').value;
+            const fileUrl = document.getElementById('fileUrl').value.trim();
+            const caption = document.getElementById('startMsgText').value.trim();
+            
+            try {
+                const result = await callAPI('/startmsg', 'POST', {
+                    api_pass: adminPassword,
+                    bot_name: selectedBot,
+                    type,
+                    fileUrl: type === 'photo' ? fileUrl : '',
+                    caption
+                });
+                
+                if (result.ok) {
+                    alert('启动消息设置成功');
+                } else {
+                    alert(`设置失败: ${result.error || '未知错误'}`);
+                }
+            } catch (error) {
+                alert(`设置失败: ${error.message}`);
+            }
+        }
+        
+        // 群发消息
+        async function broadcastMessage() {
+            if (!selectedBot) {
+                alert('请先选择一个Bot');
+                return;
+            }
+            
+            const type = document.querySelector('input[name="broadcastType"]:checked').value;
+            const fileUrl = document.getElementById('broadcastFileUrl').value.trim();
+            const text = document.getElementById('broadcastText').value.trim();
+            
+            if (type !== 'text' && !fileUrl) {
+                alert('请输入文件/图片URL');
+                return;
+            }
+            
+            if (!text && type === 'text') {
+                alert('请输入消息内容');
+                return;
+            }
+            
+            try {
+                document.getElementById('broadcastResult').innerHTML = '<div class="alert alert-info">正在发送消息，请稍候...</div>';
+                
+                const result = await callAPI('/broadcast', 'POST', {
+                    api_pass: adminPassword,
+                    bot_name: selectedBot,
+                    admin_id: '0', // 这里使用0作为占位符，后端会检查管理员权限
+                    text,
+                    fileType: type === 'text' ? '' : type,
+                    fileUrl: type === 'text' ? '' : fileUrl
+                });
+                
+                if (result.ok) {
+                    document.getElementById('broadcastResult').innerHTML = 
+                        `<div class="alert alert-success">发送成功！已发送给 ${result.count} 位用户</div>`;
+                } else {
+                    document.getElementById('broadcastResult').innerHTML = 
+                        `<div class="alert alert-danger">发送失败: ${result.error || '未知错误'}</div>`;
+                }
+            } catch (error) {
+                document.getElementById('broadcastResult').innerHTML = 
+                    `<div class="alert alert-danger">发送失败: ${error.message}</div>`;
+            }
+        }
+    </script>
 </body>
 </html>
