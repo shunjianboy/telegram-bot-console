@@ -16,9 +16,16 @@
     .bot-list { margin: 0.5em 0; }
     .bot-list-item { margin-bottom: 0.3em; }
     .delete-btn { color: #fff; background: #e74c3c; border: none; padding: 0.2em 0.7em; border-radius: 3px; margin-left: 1em; cursor:pointer;}
-    .blocked-user-item { margin-bottom: 0.3em; }
-    .unblock-btn { color: #fff; background: #2ecc71; border: none; padding: 0.2em 0.7em; border-radius: 3px; margin-left: 1em; cursor:pointer;}
-    .block-btn { color: #fff; background: #e74c3c; border: none; padding: 0.2em 0.7em; border-radius: 3px; margin-left: 1em; cursor:pointer;}
+    .blocked-user-item { display: flex; align-items: center; margin-bottom: 5px; }
+    .unblock-btn { color: #fff; background: #3498db; border: none; padding: 0.2em 0.7em; border-radius: 3px; margin-left: 1em; cursor:pointer;}
+    #apiDocs { background: #f8f9fa; padding: 1em; border-radius: 5px; border: 1px solid #e9ecef; }
+    .api-endpoint { margin-bottom: 1em; }
+    .api-method { display: inline-block; padding: 2px 6px; border-radius: 3px; color: white; font-weight: bold; margin-right: 8px; }
+    .get { background-color: #61affe; }
+    .post { background-color: #49cc90; }
+    .delete { background-color: #f93e3e; }
+    pre { background: #f1f1f1; padding: 10px; border-radius: 3px; overflow-x: auto; }
+    code { font-family: monospace; }
   </style>
 </head>
 <body>
@@ -45,16 +52,6 @@
       <select id="botSelect" onchange="loadCustomers()"></select>
       <button onclick="loadCustomers()">刷新客户ID</button>
       <div id="customersDiv"></div>
-    </div>
-    <div class="section">
-      <h2>已停用用户管理</h2>
-      <select id="blockedBotSelect" onchange="loadBlockedUsers()"></select>
-      <button onclick="loadBlockedUsers()">刷新停用用户</button>
-      <div id="blockedUsersDiv"></div>
-      <form id="blockUserForm">
-        <label>用户ID: <input type="text" id="blockUserId" required></label>
-        <button type="submit">停用该用户</button>
-      </form>
     </div>
     <div class="section">
       <h2>发送消息（单发）</h2>
@@ -126,41 +123,108 @@
         <button type="submit">保存</button>
       </form>
     </div>
+    
+    <!-- 添加已停用用户管理 -->
+    <div class="section">
+      <h2>已停用用户管理</h2>
+      <label>选择Bot:
+        <select id="blockedBotSelect"></select>
+      </label>
+      <button onclick="loadBlockedUsers()">刷新</button>
+      <form id="blockUserForm">
+        <input type="text" id="blockUserId" placeholder="用户ID">
+        <button type="submit">添加到停用列表</button>
+      </form>
+      <div id="blockedUsersList"></div>
+    </div>
+    
+    <!-- 添加API文档部分 -->
     <div class="section">
       <h2>API文档</h2>
-      <div>
-        <h3>API端点列表</h3>
-        <ul>
-          <li><code>/api/login</code> - 登录验证</li>
-          <li><code>/api/bots</code> - Bot配置管理</li>
-          <li><code>/api/customers/{bot_name}</code> - 获取客户ID列表</li>
-          <li><code>/api/send</code> - 发送单条消息</li>
-          <li><code>/api/broadcast</code> - 群发消息</li>
-          <li><code>/api/keywords</code> - 关键词管理</li>
-          <li><code>/api/startmsg</code> - 启动消息管理</li>
-          <li><code>/api/blocked</code> - 获取停用用户列表</li>
-          <li><code>/api/block</code> - 停用/启用用户</li>
-        </ul>
-        <p>所有API调用需要提供api_pass参数进行身份验证</p>
-        <h3>示例代码</h3>
-        <pre><code>
-// 获取Bot列表
-fetch("https://telegram-bot-api.shunjianboy-e0e.workers.dev/api/bots")
-  .then(r => r.json())
-  .then(data => console.log(data));
-
-// 添加新Bot
-fetch("https://telegram-bot-api.shunjianboy-e0e.workers.dev/api/bots", {
-  method: "POST",
-  headers: {"Content-Type": "application/json"},
-  body: JSON.stringify({
-    api_pass: "您的管理密码",
-    bot_name: "mybot",
-    token: "BOT_TOKEN",
-    admins: ["123456789"]
-  })
-}).then(r => r.json());
-        </code></pre>
+      <div id="apiDocs">
+        <p>所有API请求需要包含<code>api_key</code>参数进行身份验证，可通过以下方式获取API密钥：</p>
+        <button onclick="generateApiKey()">生成API密钥</button>
+        <div id="apiKeyDisplay"></div>
+        
+        <h3>可用API端点：</h3>
+        <div class="api-endpoint">
+          <div><span class="api-method get">GET</span> <code>/api/v1/bots</code> - 获取所有Bot列表</div>
+          <pre>curl -X GET "https://telegram-bot-api.shunjianboy-e0e.workers.dev/api/v1/bots?api_key=YOUR_API_KEY"</pre>
+        </div>
+        
+        <div class="api-endpoint">
+          <div><span class="api-method post">POST</span> <code>/api/v1/bots</code> - 添加/更新Bot</div>
+          <pre>curl -X POST "https://telegram-bot-api.shunjianboy-e0e.workers.dev/api/v1/bots" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "api_key": "YOUR_API_KEY",
+    "bot_name": "your_bot_name",
+    "token": "BOT_TOKEN",
+    "admins": ["123456789", "987654321"]
+  }'</pre>
+        </div>
+        
+        <div class="api-endpoint">
+          <div><span class="api-method delete">DELETE</span> <code>/api/v1/bots/{bot_name}</code> - 删除Bot</div>
+          <pre>curl -X DELETE "https://telegram-bot-api.shunjianboy-e0e.workers.dev/api/v1/bots/your_bot_name?api_key=YOUR_API_KEY"</pre>
+        </div>
+        
+        <div class="api-endpoint">
+          <div><span class="api-method get">GET</span> <code>/api/v1/customers/{bot_name}</code> - 获取客户ID列表</div>
+          <pre>curl -X GET "https://telegram-bot-api.shunjianboy-e0e.workers.dev/api/v1/customers/your_bot_name?api_key=YOUR_API_KEY"</pre>
+        </div>
+        
+        <div class="api-endpoint">
+          <div><span class="api-method post">POST</span> <code>/api/v1/send</code> - 发送消息</div>
+          <pre>curl -X POST "https://telegram-bot-api.shunjianboy-e0e.workers.dev/api/v1/send" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "api_key": "YOUR_API_KEY",
+    "bot_name": "your_bot_name",
+    "admin_id": "123456789",
+    "customer_ids": ["987654321"],
+    "text": "消息内容"
+  }'</pre>
+        </div>
+        
+        <div class="api-endpoint">
+          <div><span class="api-method post">POST</span> <code>/api/v1/broadcast</code> - 群发消息</div>
+          <pre>curl -X POST "https://telegram-bot-api.shunjianboy-e0e.workers.dev/api/v1/broadcast" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "api_key": "YOUR_API_KEY",
+    "bot_name": "your_bot_name",
+    "admin_id": "123456789",
+    "text": "群发消息内容"
+  }'</pre>
+        </div>
+        
+        <div class="api-endpoint">
+          <div><span class="api-method get">GET</span> <code>/api/v1/blocked/{bot_name}</code> - 获取已停用用户列表</div>
+          <pre>curl -X GET "https://telegram-bot-api.shunjianboy-e0e.workers.dev/api/v1/blocked/your_bot_name?api_key=YOUR_API_KEY"</pre>
+        </div>
+        
+        <div class="api-endpoint">
+          <div><span class="api-method post">POST</span> <code>/api/v1/blocked</code> - 添加停用用户</div>
+          <pre>curl -X POST "https://telegram-bot-api.shunjianboy-e0e.workers.dev/api/v1/blocked" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "api_key": "YOUR_API_KEY",
+    "bot_name": "your_bot_name",
+    "user_id": "123456789"
+  }'</pre>
+        </div>
+        
+        <div class="api-endpoint">
+          <div><span class="api-method delete">DELETE</span> <code>/api/v1/blocked</code> - 移除停用用户</div>
+          <pre>curl -X DELETE "https://telegram-bot-api.shunjianboy-e0e.workers.dev/api/v1/blocked" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "api_key": "YOUR_API_KEY",
+    "bot_name": "your_bot_name",
+    "user_id": "123456789"
+  }'</pre>
+        </div>
       </div>
     </div>
   </div>
@@ -171,6 +235,7 @@ fetch("https://telegram-bot-api.shunjianboy-e0e.workers.dev/api/bots", {
     // 配置
     const workerApiBase = "https://telegram-bot-api.shunjianboy-e0e.workers.dev/api";
     let api_pass = localStorage.getItem('adminApiPass') || "";
+    let api_key = localStorage.getItem('adminApiKey') || "";
 
     function showMain() {
       document.getElementById('loginBox').style.display = 'none';
@@ -267,87 +332,11 @@ fetch("https://telegram-bot-api.shunjianboy-e0e.workers.dev/api/bots", {
       const list = await res.json();
       let html = '<ul>';
       for(const id of list){
-        html += `<li>${id} <button onclick="document.getElementById('sendCustomerIds').value='${id}';">填入</button>
-        <button class="block-btn" onclick="blockUser('${bot_name}', '${id}')">停用</button></li>`;
+        html += `<li>${id} <button onclick="document.getElementById('sendCustomerIds').value='${id}';">填入</button></li>`;
       }
       html += '</ul>';
       document.getElementById('customersDiv').innerHTML = html;
     }
-
-    // 加载已停用用户列表
-    async function loadBlockedUsers() {
-      const bot_name = document.getElementById('blockedBotSelect').value;
-      if (!bot_name) return;
-      
-      const res = await fetch(workerApiBase + `/blocked?bot_name=${encodeURIComponent(bot_name)}`);
-      const users = await res.json();
-      
-      if (users && users.length > 0) {
-        let html = '<h3>已停用机器人的用户列表</h3><ul>';
-        for (const user_id of users) {
-          html += `<li class="blocked-user-item">
-            <span>用户ID: ${user_id}</span>
-            <button class="unblock-btn" onclick="unblockUser('${bot_name}', '${user_id}')">解除停用</button>
-          </li>`;
-        }
-        html += '</ul>';
-        document.getElementById('blockedUsersDiv').innerHTML = html;
-      } else {
-        document.getElementById('blockedUsersDiv').innerHTML = '<p>没有已停用的用户</p>';
-      }
-    }
-
-    // 停用用户
-    async function blockUser(bot_name, user_id) {
-      if(!confirm(`确定要停用用户ID：${user_id}？`)) return;
-      
-      const res = await fetch(workerApiBase + "/block", {
-        method: "POST",
-        headers: {"Content-Type": "application/json"},
-        body: JSON.stringify({api_pass, bot_name, user_id, action: "block"})
-      });
-      
-      const data = await res.json();
-      if(data.ok) {
-        showModal(`已停用用户ID: ${user_id}`);
-        loadBlockedUsers();
-        loadCustomers();
-      } else {
-        showModal('操作失败: ' + data.error);
-      }
-    }
-
-    // 解除停用用户
-    async function unblockUser(bot_name, user_id) {
-      if(!confirm(`确定要解除停用用户ID：${user_id}？`)) return;
-      
-      const res = await fetch(workerApiBase + "/block", {
-        method: "POST",
-        headers: {"Content-Type": "application/json"},
-        body: JSON.stringify({api_pass, bot_name, user_id, action: "unblock"})
-      });
-      
-      const data = await res.json();
-      if(data.ok) {
-        showModal(`已解除停用用户ID: ${user_id}`);
-        loadBlockedUsers();
-      } else {
-        showModal('操作失败: ' + data.error);
-      }
-    }
-
-    // 表单提交停用用户
-    document.getElementById('blockUserForm') && (document.getElementById('blockUserForm').onsubmit = async (e) => {
-      e.preventDefault();
-      const bot_name = document.getElementById('blockedBotSelect').value;
-      const user_id = document.getElementById('blockUserId').value.trim();
-      
-      if(!bot_name) return showModal('请选择Bot');
-      if(!user_id) return showModal('请输入用户ID');
-      
-      await blockUser(bot_name, user_id);
-      document.getElementById('blockUserId').value = '';
-    });
 
     document.getElementById('sendForm').onsubmit = async (e)=>{
       e.preventDefault();
@@ -384,25 +373,7 @@ fetch("https://telegram-bot-api.shunjianboy-e0e.workers.dev/api/bots", {
         body:JSON.stringify({api_pass,bot_name,admin_id,customer_ids,text,fileType,fileUrl})
       });
       const d = await res.json();
-      
-      if(d.ok) {
-        // 检查是否有未发送的消息（给已停用用户）
-        let hasBlockedUsers = false;
-        if (d.results && Array.isArray(d.results)) {
-          for (const result of d.results) {
-            if (!result.ok && result.error && result.error.includes("已停用")) {
-              hasBlockedUsers = true;
-              break;
-            }
-          }
-        }
-        
-        if (hasBlockedUsers) {
-          showModal('消息已发送，但部分用户已停用机器人，未接收消息');
-        } else {
-          showModal('消息已发送!');
-        }
-      }
+      if(d.ok) showModal('消息已发送!');
       else showModal('发送失败:'+(d.error||JSON.stringify(d)));
     };
 
@@ -518,10 +489,101 @@ fetch("https://telegram-bot-api.shunjianboy-e0e.workers.dev/api/bots", {
       if(d.ok) showModal('启动消息已保存');
       else showModal('保存失败:'+d.error);
     };
+    
+    // 已停用用户管理
+    async function loadBlockedUsers() {
+      const bot_name = document.getElementById('blockedBotSelect').value;
+      if(!bot_name) return;
+      
+      const res = await fetch(workerApiBase + `/blocked?bot_name=${encodeURIComponent(bot_name)}`);
+      const users = await res.json();
+      
+      if(users && users.length > 0) {
+        let html = '<h3>已停用机器人的用户列表</h3><ul>';
+        for(const user_id of users) {
+          html += `<li class="blocked-user-item">
+            <span>用户ID: ${user_id}</span>
+            <button class="unblock-btn" onclick="unblockUser('${bot_name}', '${user_id}')">解除停用</button>
+          </li>`;
+        }
+        html += '</ul>';
+        document.getElementById('blockedUsersList').innerHTML = html;
+      } else {
+        document.getElementById('blockedUsersList').innerHTML = '<p>没有已停用的用户</p>';
+      }
+    }
+    
+    document.getElementById('blockUserForm').onsubmit = async (e) => {
+      e.preventDefault();
+      const bot_name = document.getElementById('blockedBotSelect').value;
+      const user_id = document.getElementById('blockUserId').value.trim();
+      
+      if(!bot_name || !user_id) {
+        showModal('请选择Bot并输入用户ID');
+        return;
+      }
+      
+      const res = await fetch(workerApiBase + "/blocked", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({api_pass, bot_name, user_id})
+      });
+      
+      const data = await res.json();
+      if(data.ok) {
+        showModal('用户已添加到停用列表');
+        document.getElementById('blockUserId').value = '';
+        loadBlockedUsers();
+      } else {
+        showModal('添加失败: ' + (data.error || '未知错误'));
+      }
+    };
+    
+    async function unblockUser(bot_name, user_id) {
+      if(!confirm(`确定要解除用户 ${user_id} 的停用状态吗？`)) return;
+      
+      const res = await fetch(workerApiBase + "/blocked", {
+        method: "DELETE",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({api_pass, bot_name, user_id})
+      });
+      
+      const data = await res.json();
+      if(data.ok) {
+        showModal('用户已解除停用');
+        loadBlockedUsers();
+      } else {
+        showModal('解除失败: ' + (data.error || '未知错误'));
+      }
+    }
+    
+    // API密钥管理
+    async function generateApiKey() {
+      const res = await fetch(workerApiBase + "/apikey", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({api_pass})
+      });
+      
+      const data = await res.json();
+      if(data.ok && data.api_key) {
+        api_key = data.api_key;
+        localStorage.setItem('adminApiKey', api_key);
+        document.getElementById('apiKeyDisplay').innerHTML = `<p>您的API密钥: <code>${api_key}</code></p>
+          <p>请妥善保管此密钥，它可以访问所有API功能。</p>`;
+      } else {
+        showModal('生成API密钥失败: ' + (data.error || '未知错误'));
+      }
+    }
 
     window.onload = function(){
       if(api_pass) showMain();
       else showLogin();
+      
+      if(api_key) {
+        document.getElementById('apiKeyDisplay').innerHTML = `<p>您的API密钥: <code>${api_key}</code></p>
+          <p>请妥善保管此密钥，它可以访问所有API功能。</p>`;
+      }
     }
   </script>
 </body>
