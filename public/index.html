@@ -16,16 +16,15 @@
     .bot-list { margin: 0.5em 0; }
     .bot-list-item { margin-bottom: 0.3em; }
     .delete-btn { color: #fff; background: #e74c3c; border: none; padding: 0.2em 0.7em; border-radius: 3px; margin-left: 1em; cursor:pointer;}
-    .blocked-user-item { display: flex; align-items: center; margin-bottom: 5px; }
-    .unblock-btn { color: #fff; background: #3498db; border: none; padding: 0.2em 0.7em; border-radius: 3px; margin-left: 1em; cursor:pointer;}
-    #apiDocs { background: #f8f9fa; padding: 1em; border-radius: 5px; border: 1px solid #e9ecef; }
-    .api-endpoint { margin-bottom: 1em; }
-    .api-method { display: inline-block; padding: 2px 6px; border-radius: 3px; color: white; font-weight: bold; margin-right: 8px; }
-    .get { background-color: #61affe; }
-    .post { background-color: #49cc90; }
-    .delete { background-color: #f93e3e; }
-    pre { background: #f1f1f1; padding: 10px; border-radius: 3px; overflow-x: auto; }
-    code { font-family: monospace; }
+    .api-section { background: #f8f9fa; padding: 15px; border-radius: 5px; margin: 10px 0; }
+    .api-endpoint { font-family: monospace; background: #e9ecef; padding: 5px; border-radius: 3px; }
+    .blocked-user-item { margin-bottom: 5px; display: flex; align-items: center; }
+    .unblock-btn { background: #27ae60; color: white; border: none; border-radius: 3px; padding: 2px 8px; cursor: pointer; margin-left: 10px; }
+    #tabs { display: flex; margin-bottom: 15px; border-bottom: 1px solid #ddd; }
+    .tab { padding: 10px 15px; cursor: pointer; }
+    .tab.active { border-bottom: 2px solid #3498db; }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
   </style>
 </head>
 <body>
@@ -36,195 +35,251 @@
   </div>
   <div id="mainBox" style="display:none;">
     <h1>Telegram Bot 多Bot管理后台</h1>
-    <div class="section">
-      <h2>Bot配置</h2>
-      <form id="botForm">
-        <label>Bot名称(用户名): <input type="text" id="bot_name" required placeholder="如 mytest_bot"></label><br>
-        <label>Bot Token: <input type="text" id="bot_token" required></label><br>
-        <label>管理员ID(多个用英文逗号分隔): <input type="text" id="admin_ids" required></label><br>
-        <button type="submit">添加/更新Bot</button>
-      </form>
-      <button onclick="loadBots()">刷新Bot列表</button>
-      <div id="botsDiv" class="bot-list"></div>
+    
+    <div id="tabs">
+      <div class="tab active" data-tab="main">主要功能</div>
+      <div class="tab" data-tab="blocked">已停用用户</div>
+      <div class="tab" data-tab="api">API文档</div>
     </div>
-    <div class="section">
-      <h2>客户ID列表</h2>
-      <select id="botSelect" onchange="loadCustomers()"></select>
-      <button onclick="loadCustomers()">刷新客户ID</button>
-      <div id="customersDiv"></div>
-    </div>
-    <div class="section">
-      <h2>发送消息（单发）</h2>
-      <form id="sendForm">
-        <label>选择Bot: <select id="sendBotSelect"></select></label><br>
-        <label>管理员ID: <input type="text" id="sendAdminId" required></label><br>
-        <label>客户ID(可多选,用逗号分隔): <input type="text" id="sendCustomerIds" required></label><br>
-        <label>内容: <textarea id="sendMsg"></textarea></label><br>
-        <label>上传文件:
-          <input type="file" id="sendFile">
-          <select id="fileType">
-            <option value="">请选择类型</option>
-            <option value="photo">图片</option>
-            <option value="document">普通文件</option>
-          </select>
-        </label><br>
-        <button type="submit">发送</button>
-      </form>
-    </div>
-    <div class="section">
-      <h2>群发通知</h2>
-      <form id="broadcastForm">
-        <label>选择Bot: <select id="broadcastBotSelect"></select></label><br>
-        <label>管理员ID: <input type="text" id="broadcastAdminId" required></label><br>
-        <label>内容: <textarea id="broadcastMsg"></textarea></label><br>
-        <label>上传文件:
-          <input type="file" id="broadcastFile">
-          <select id="broadcastFileType">
-            <option value="">请选择类型</option>
-            <option value="photo">图片</option>
-            <option value="document">普通文件</option>
-          </select>
-        </label><br>
-        <button type="submit">群发</button>
-      </form>
-    </div>
-    <div class="section">
-      <h2>关键词自动回复</h2>
-      <label>选择Bot:
-        <select id="kwBotSelect"></select>
-      </label>
-      <button onclick="loadKeywords()">刷新</button>
-      <form id="kwForm">
-        <select id="kwType">
-          <option value="equal">精准匹配</option>
-          <option value="contain">模糊匹配</option>
-        </select>
-        <input type="text" id="kwKey" placeholder="关键词">
-        <input type="text" id="kwReply" placeholder="回复内容">
-        <button type="submit">添加关键词</button>
-      </form>
-      <div id="kwList"></div>
-    </div>
-    <div class="section">
-      <h2>启动消息设置</h2>
-      <label>选择Bot:
-        <select id="startMsgBotSelect"></select>
-      </label>
-      <form id="startMsgForm">
-        <select id="startMsgType">
-          <option value="none">纯文字</option>
-          <option value="photo">图片</option>
-        </select>
-        <label id="photoUrlLabel" style="display:inline;">
-          图片链接（上传到 <a href="https://image.a5fe.com/" target="_blank">图床</a> 后粘贴链接）:
-          <input type="text" id="startMsgPhotoUrl" placeholder="https://image.a5fe.com/xxx.jpg">
+    
+    <!-- 主要功能标签页 -->
+    <div id="mainTab" class="tab-content active">
+      <div class="section">
+        <h2>Bot配置</h2>
+        <form id="botForm">
+          <label>Bot名称(用户名): <input type="text" id="bot_name" required placeholder="如 mytest_bot"></label><br>
+          <label>Bot Token: <input type="text" id="bot_token" required></label><br>
+          <label>管理员ID(多个用英文逗号分隔): <input type="text" id="admin_ids" required></label><br>
+          <button type="submit">添加/更新Bot</button>
+        </form>
+        <button onclick="loadBots()">刷新Bot列表</button>
+        <div id="botsDiv" class="bot-list"></div>
+      </div>
+      <div class="section">
+        <h2>客户ID列表</h2>
+        <select id="botSelect" onchange="loadCustomers()"></select>
+        <button onclick="loadCustomers()">刷新客户ID</button>
+        <div id="customersDiv"></div>
+      </div>
+      <div class="section">
+        <h2>发送消息（单发）</h2>
+        <form id="sendForm">
+          <label>选择Bot: <select id="sendBotSelect"></select></label><br>
+          <label>管理员ID: <input type="text" id="sendAdminId" required></label><br>
+          <label>客户ID(可多选,用逗号分隔): <input type="text" id="sendCustomerIds" required></label><br>
+          <label>内容: <textarea id="sendMsg"></textarea></label><br>
+          <label>上传文件:
+            <input type="file" id="sendFile">
+            <select id="fileType">
+              <option value="">请选择类型</option>
+              <option value="photo">图片</option>
+              <option value="document">普通文件</option>
+            </select>
+          </label><br>
+          <button type="submit">发送</button>
+        </form>
+      </div>
+      <div class="section">
+        <h2>群发通知</h2>
+        <form id="broadcastForm">
+          <label>选择Bot: <select id="broadcastBotSelect"></select></label><br>
+          <label>管理员ID: <input type="text" id="broadcastAdminId" required></label><br>
+          <label>内容: <textarea id="broadcastMsg"></textarea></label><br>
+          <label>上传文件:
+            <input type="file" id="broadcastFile">
+            <select id="broadcastFileType">
+              <option value="">请选择类型</option>
+              <option value="photo">图片</option>
+              <option value="document">普通文件</option>
+            </select>
+          </label><br>
+          <button type="submit">群发</button>
+        </form>
+      </div>
+      <div class="section">
+        <h2>关键词自动回复</h2>
+        <label>选择Bot:
+          <select id="kwBotSelect"></select>
         </label>
-        <textarea id="startMsgText" placeholder="请输入启动欢迎语"></textarea>
-        <button type="submit">保存</button>
-      </form>
+        <button onclick="loadKeywords()">刷新</button>
+        <form id="kwForm">
+          <select id="kwType">
+            <option value="equal">精准匹配</option>
+            <option value="contain">模糊匹配</option>
+          </select>
+          <input type="text" id="kwKey" placeholder="关键词">
+          <input type="text" id="kwReply" placeholder="回复内容">
+          <button type="submit">添加关键词</button>
+        </form>
+        <div id="kwList"></div>
+      </div>
+      <div class="section">
+        <h2>启动消息设置</h2>
+        <label>选择Bot:
+          <select id="startMsgBotSelect"></select>
+        </label>
+        <form id="startMsgForm">
+          <select id="startMsgType">
+            <option value="none">纯文字</option>
+            <option value="photo">图片</option>
+          </select>
+          <label id="photoUrlLabel" style="display:inline;">
+            图片链接（上传到 <a href="https://image.a5fe.com/" target="_blank">图床</a> 后粘贴链接）:
+            <input type="text" id="startMsgPhotoUrl" placeholder="https://image.a5fe.com/xxx.jpg">
+          </label>
+          <textarea id="startMsgText" placeholder="请输入启动欢迎语"></textarea>
+          <button type="submit">保存</button>
+        </form>
+      </div>
     </div>
     
-    <!-- 添加已停用用户管理 -->
-    <div class="section">
-      <h2>已停用用户管理</h2>
+    <!-- 已停用用户标签页 -->
+    <div id="blockedTab" class="tab-content">
+      <h2>已停用机器人的用户列表</h2>
+      <p>这些用户已经停用或删除了机器人，向他们发送消息会失败</p>
       <label>选择Bot:
-        <select id="blockedBotSelect"></select>
+        <select id="blockedBotSelect" onchange="loadBlockedUsers()"></select>
       </label>
-      <button onclick="loadBlockedUsers()">刷新</button>
-      <form id="blockUserForm">
-        <input type="text" id="blockUserId" placeholder="用户ID">
-        <button type="submit">添加到停用列表</button>
-      </form>
-      <div id="blockedUsersList"></div>
+      <button onclick="loadBlockedUsers()">刷新列表</button>
+      <div id="blockedUsersDiv"></div>
     </div>
     
-    <!-- 添加API文档部分 -->
-    <div class="section">
+    <!-- API文档标签页 -->
+    <div id="apiTab" class="tab-content">
       <h2>API文档</h2>
-      <div id="apiDocs">
-        <p>所有API请求需要包含<code>api_key</code>参数进行身份验证，可通过以下方式获取API密钥：</p>
-        <button onclick="generateApiKey()">生成API密钥</button>
-        <div id="apiKeyDisplay"></div>
-        
-        <h3>可用API端点：</h3>
-        <div class="api-endpoint">
-          <div><span class="api-method get">GET</span> <code>/api/v1/bots</code> - 获取所有Bot列表</div>
-          <pre>curl -X GET "https://telegram-bot-api.shunjianboy-e0e.workers.dev/api/v1/bots?api_key=YOUR_API_KEY"</pre>
-        </div>
-        
-        <div class="api-endpoint">
-          <div><span class="api-method post">POST</span> <code>/api/v1/bots</code> - 添加/更新Bot</div>
-          <pre>curl -X POST "https://telegram-bot-api.shunjianboy-e0e.workers.dev/api/v1/bots" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "api_key": "YOUR_API_KEY",
-    "bot_name": "your_bot_name",
-    "token": "BOT_TOKEN",
-    "admins": ["123456789", "987654321"]
-  }'</pre>
-        </div>
-        
-        <div class="api-endpoint">
-          <div><span class="api-method delete">DELETE</span> <code>/api/v1/bots/{bot_name}</code> - 删除Bot</div>
-          <pre>curl -X DELETE "https://telegram-bot-api.shunjianboy-e0e.workers.dev/api/v1/bots/your_bot_name?api_key=YOUR_API_KEY"</pre>
-        </div>
-        
-        <div class="api-endpoint">
-          <div><span class="api-method get">GET</span> <code>/api/v1/customers/{bot_name}</code> - 获取客户ID列表</div>
-          <pre>curl -X GET "https://telegram-bot-api.shunjianboy-e0e.workers.dev/api/v1/customers/your_bot_name?api_key=YOUR_API_KEY"</pre>
-        </div>
-        
-        <div class="api-endpoint">
-          <div><span class="api-method post">POST</span> <code>/api/v1/send</code> - 发送消息</div>
-          <pre>curl -X POST "https://telegram-bot-api.shunjianboy-e0e.workers.dev/api/v1/send" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "api_key": "YOUR_API_KEY",
-    "bot_name": "your_bot_name",
-    "admin_id": "123456789",
-    "customer_ids": ["987654321"],
-    "text": "消息内容"
-  }'</pre>
-        </div>
-        
-        <div class="api-endpoint">
-          <div><span class="api-method post">POST</span> <code>/api/v1/broadcast</code> - 群发消息</div>
-          <pre>curl -X POST "https://telegram-bot-api.shunjianboy-e0e.workers.dev/api/v1/broadcast" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "api_key": "YOUR_API_KEY",
-    "bot_name": "your_bot_name",
-    "admin_id": "123456789",
-    "text": "群发消息内容"
-  }'</pre>
-        </div>
-        
-        <div class="api-endpoint">
-          <div><span class="api-method get">GET</span> <code>/api/v1/blocked/{bot_name}</code> - 获取已停用用户列表</div>
-          <pre>curl -X GET "https://telegram-bot-api.shunjianboy-e0e.workers.dev/api/v1/blocked/your_bot_name?api_key=YOUR_API_KEY"</pre>
-        </div>
-        
-        <div class="api-endpoint">
-          <div><span class="api-method post">POST</span> <code>/api/v1/blocked</code> - 添加停用用户</div>
-          <pre>curl -X POST "https://telegram-bot-api.shunjianboy-e0e.workers.dev/api/v1/blocked" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "api_key": "YOUR_API_KEY",
-    "bot_name": "your_bot_name",
-    "user_id": "123456789"
-  }'</pre>
-        </div>
-        
-        <div class="api-endpoint">
-          <div><span class="api-method delete">DELETE</span> <code>/api/v1/blocked</code> - 移除停用用户</div>
-          <pre>curl -X DELETE "https://telegram-bot-api.shunjianboy-e0e.workers.dev/api/v1/blocked" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "api_key": "YOUR_API_KEY",
-    "bot_name": "your_bot_name",
-    "user_id": "123456789"
-  }'</pre>
-        </div>
+      <p>所有API请求都需要通过api_pass参数验证身份，可以在请求体中传递</p>
+      
+      <div class="api-section">
+        <h3>1. 登录验证</h3>
+        <p><span class="api-endpoint">POST /api/login</span></p>
+        <pre>
+请求体:
+{
+  "password": "您的管理密码"
+}
+
+响应:
+{
+  "ok": true|false
+}
+        </pre>
+      </div>
+      
+      <div class="api-section">
+        <h3>2. Bot管理</h3>
+        <p><span class="api-endpoint">GET /api/bots</span> - 获取所有Bot配置</p>
+        <p><span class="api-endpoint">POST /api/bots</span> - 添加/更新Bot</p>
+        <pre>
+请求体:
+{
+  "api_pass": "您的管理密码",
+  "bot_name": "bot用户名",
+  "token": "bot的token",
+  "admins": ["管理员ID1", "管理员ID2"]
+}
+        </pre>
+        <p><span class="api-endpoint">DELETE /api/bots</span> - 删除Bot</p>
+        <pre>
+请求体:
+{
+  "api_pass": "您的管理密码",
+  "bot_name": "要删除的bot用户名"
+}
+        </pre>
+      </div>
+      
+      <div class="api-section">
+        <h3>3. 客户管理</h3>
+        <p><span class="api-endpoint">GET /api/customers/{bot_name}</span> - 获取该Bot的所有客户ID</p>
+        <p><span class="api-endpoint">GET /api/blocked?bot_name={bot_name}</span> - 获取已停用Bot的用户</p>
+        <p><span class="api-endpoint">POST /api/blocked</span> - 添加停用用户</p>
+        <pre>
+请求体:
+{
+  "api_pass": "您的管理密码",
+  "bot_name": "bot用户名",
+  "user_id": "用户ID"
+}
+        </pre>
+        <p><span class="api-endpoint">DELETE /api/blocked</span> - 移除停用用户</p>
+        <pre>
+请求体:
+{
+  "api_pass": "您的管理密码",
+  "bot_name": "bot用户名",
+  "user_id": "用户ID"
+}
+        </pre>
+      </div>
+      
+      <div class="api-section">
+        <h3>4. 消息发送</h3>
+        <p><span class="api-endpoint">POST /api/send</span> - 发送单条消息</p>
+        <pre>
+请求体:
+{
+  "api_pass": "您的管理密码",
+  "bot_name": "bot用户名",
+  "admin_id": "管理员ID",
+  "customer_ids": ["用户ID1", "用户ID2"],
+  "text": "消息内容",
+  "fileType": "photo|document", // 可选
+  "fileUrl": "文件URL"  // 可选
+}
+        </pre>
+        <p><span class="api-endpoint">POST /api/broadcast</span> - 群发消息</p>
+        <pre>
+请求体:
+{
+  "api_pass": "您的管理密码",
+  "bot_name": "bot用户名",
+  "admin_id": "管理员ID",
+  "text": "消息内容",
+  "fileType": "photo|document", // 可选
+  "fileUrl": "文件URL"  // 可选
+}
+        </pre>
+      </div>
+      
+      <div class="api-section">
+        <h3>5. 启动消息管理</h3>
+        <p><span class="api-endpoint">GET /api/startmsg?bot_name={bot_name}</span> - 获取启动消息配置</p>
+        <p><span class="api-endpoint">POST /api/startmsg</span> - 设置启动消息</p>
+        <pre>
+请求体:
+{
+  "api_pass": "您的管理密码",
+  "bot_name": "bot用户名",
+  "type": "none|photo",
+  "fileUrl": "图片链接",  // 如果type为photo
+  "caption": "消息文本"
+}
+        </pre>
+      </div>
+      
+      <div class="api-section">
+        <h3>6. 关键词管理</h3>
+        <p><span class="api-endpoint">GET /api/keywords?bot_name={bot_name}</span> - 获取关键词列表</p>
+        <p><span class="api-endpoint">POST /api/keywords</span> - 添加关键词</p>
+        <pre>
+请求体:
+{
+  "api_pass": "您的管理密码",
+  "bot_name": "bot用户名",
+  "type": "equal|contain",
+  "keyword": "关键词",
+  "reply": "回复内容"
+}
+        </pre>
+        <p><span class="api-endpoint">DELETE /api/keywords</span> - 删除关键词</p>
+        <pre>
+请求体:
+{
+  "api_pass": "您的管理密码",
+  "bot_name": "bot用户名",
+  "idx": 关键词索引
+}
+        </pre>
       </div>
     </div>
   </div>
@@ -235,7 +290,6 @@
     // 配置
     const workerApiBase = "https://telegram-bot-api.shunjianboy-e0e.workers.dev/api";
     let api_pass = localStorage.getItem('adminApiPass') || "";
-    let api_key = localStorage.getItem('adminApiKey') || "";
 
     function showMain() {
       document.getElementById('loginBox').style.display = 'none';
@@ -268,6 +322,28 @@
       document.getElementById('modal').style.display = 'flex';
     }
     document.getElementById('modal').onclick = function(){this.style.display='none'};
+
+    // 标签页切换
+    document.querySelectorAll('.tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        // 切换标签样式
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+        
+        // 切换内容
+        const tabName = tab.dataset.tab;
+        document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+        
+        if (tabName === 'main') {
+          document.getElementById('mainTab').classList.add('active');
+        } else if (tabName === 'blocked') {
+          document.getElementById('blockedTab').classList.add('active');
+          loadBlockedUsers();
+        } else if (tabName === 'api') {
+          document.getElementById('apiTab').classList.add('active');
+        }
+      });
+    });
 
     let botsCache = {};
     async function loadBots() {
@@ -373,7 +449,15 @@
         body:JSON.stringify({api_pass,bot_name,admin_id,customer_ids,text,fileType,fileUrl})
       });
       const d = await res.json();
-      if(d.ok) showModal('消息已发送!');
+      if(d.ok) {
+        // 检查是否有发送失败的消息
+        let failedMessages = d.results.filter(r => !r.ok && r.error === "用户停止了机器人或删除了账户");
+        if (failedMessages.length > 0) {
+          showModal(`部分消息发送失败: ${failedMessages.length}条消息未发送，因为用户已停用机器人`);
+        } else {
+          showModal('消息已发送!');
+        }
+      }
       else showModal('发送失败:'+(d.error||JSON.stringify(d)));
     };
 
@@ -493,54 +577,31 @@
     // 已停用用户管理
     async function loadBlockedUsers() {
       const bot_name = document.getElementById('blockedBotSelect').value;
-      if(!bot_name) return;
+      if (!bot_name) return;
       
       const res = await fetch(workerApiBase + `/blocked?bot_name=${encodeURIComponent(bot_name)}`);
-      const users = await res.json();
+      const blockedUsers = await res.json();
       
-      if(users && users.length > 0) {
-        let html = '<h3>已停用机器人的用户列表</h3><ul>';
-        for(const user_id of users) {
-          html += `<li class="blocked-user-item">
+      let html = '';
+      if (blockedUsers && blockedUsers.length > 0) {
+        html = '<ul>';
+        for(const user_id of blockedUsers) {
+          html += `
+          <li class="blocked-user-item">
             <span>用户ID: ${user_id}</span>
-            <button class="unblock-btn" onclick="unblockUser('${bot_name}', '${user_id}')">解除停用</button>
+            <button class="unblock-btn" onclick="unblockUser('${bot_name}', '${user_id}')">移除</button>
           </li>`;
         }
         html += '</ul>';
-        document.getElementById('blockedUsersList').innerHTML = html;
       } else {
-        document.getElementById('blockedUsersList').innerHTML = '<p>没有已停用的用户</p>';
+        html = '<p>没有已停用机器人的用户</p>';
       }
+      
+      document.getElementById('blockedUsersDiv').innerHTML = html;
     }
     
-    document.getElementById('blockUserForm').onsubmit = async (e) => {
-      e.preventDefault();
-      const bot_name = document.getElementById('blockedBotSelect').value;
-      const user_id = document.getElementById('blockUserId').value.trim();
-      
-      if(!bot_name || !user_id) {
-        showModal('请选择Bot并输入用户ID');
-        return;
-      }
-      
-      const res = await fetch(workerApiBase + "/blocked", {
-        method: "POST",
-        headers: {"Content-Type": "application/json"},
-        body: JSON.stringify({api_pass, bot_name, user_id})
-      });
-      
-      const data = await res.json();
-      if(data.ok) {
-        showModal('用户已添加到停用列表');
-        document.getElementById('blockUserId').value = '';
-        loadBlockedUsers();
-      } else {
-        showModal('添加失败: ' + (data.error || '未知错误'));
-      }
-    };
-    
     async function unblockUser(bot_name, user_id) {
-      if(!confirm(`确定要解除用户 ${user_id} 的停用状态吗？`)) return;
+      if (!confirm(`确定要将用户 ${user_id} 从停用列表中移除吗？`)) return;
       
       const res = await fetch(workerApiBase + "/blocked", {
         method: "DELETE",
@@ -549,41 +610,17 @@
       });
       
       const data = await res.json();
-      if(data.ok) {
-        showModal('用户已解除停用');
+      if (data.ok) {
+        showModal("用户已从停用列表中移除");
         loadBlockedUsers();
       } else {
-        showModal('解除失败: ' + (data.error || '未知错误'));
-      }
-    }
-    
-    // API密钥管理
-    async function generateApiKey() {
-      const res = await fetch(workerApiBase + "/apikey", {
-        method: "POST",
-        headers: {"Content-Type": "application/json"},
-        body: JSON.stringify({api_pass})
-      });
-      
-      const data = await res.json();
-      if(data.ok && data.api_key) {
-        api_key = data.api_key;
-        localStorage.setItem('adminApiKey', api_key);
-        document.getElementById('apiKeyDisplay').innerHTML = `<p>您的API密钥: <code>${api_key}</code></p>
-          <p>请妥善保管此密钥，它可以访问所有API功能。</p>`;
-      } else {
-        showModal('生成API密钥失败: ' + (data.error || '未知错误'));
+        showModal("操作失败: " + (data.error || "未知错误"));
       }
     }
 
     window.onload = function(){
       if(api_pass) showMain();
       else showLogin();
-      
-      if(api_key) {
-        document.getElementById('apiKeyDisplay').innerHTML = `<p>您的API密钥: <code>${api_key}</code></p>
-          <p>请妥善保管此密钥，它可以访问所有API功能。</p>`;
-      }
     }
   </script>
 </body>
