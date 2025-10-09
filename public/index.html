@@ -74,6 +74,27 @@
     .strikethrough { text-decoration: line-through; }
     .code { font-family: monospace; background: #f0f0f0; padding: 2px 4px; border-radius: 3px; }
     .link { color: #2980b9; }
+    
+    /* 回复类型选择器样式 */
+    .reply-type-selector {
+      margin: 10px 0;
+      padding: 5px 0;
+      border-bottom: 1px solid #eee;
+    }
+    .reply-area {
+      margin: 10px 0;
+    }
+    .photo-preview-area {
+      margin: 10px 0;
+      text-align: center;
+    }
+    .photo-preview-area img {
+      max-width: 100%;
+      max-height: 300px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      padding: 5px;
+    }
   </style>
 </head>
 <body>
@@ -159,29 +180,76 @@
         </select>
         <input type="text" id="kwKey" placeholder="关键词">
         
-        <!-- 格式化工具栏 -->
-        <div class="format-toolbar">
-          <button type="button" class="format-btn" onclick="insertFormat('bold')"><b>B</b></button>
-          <button type="button" class="format-btn" onclick="insertFormat('italic')"><i>I</i></button>
-          <button type="button" class="format-btn" onclick="insertFormat('underline')"><u>U</u></button>
-          <button type="button" class="format-btn" onclick="insertFormat('strikethrough')"><s>S</s></button>
-          <button type="button" class="format-btn" onclick="insertFormat('code')">Code</button>
-          <button type="button" class="format-btn" onclick="insertFormat('pre')">Pre</button>
-          <button type="button" class="format-btn" onclick="insertFormat('link')">Link</button>
-          <div class="format-mode-select">
-            <select id="formatMode" onchange="updatePreview()">
-              <option value="markdown">Markdown</option>
-              <option value="html">HTML</option>
+        <!-- 回复类型选择 -->
+        <div class="reply-type-selector">
+          <label>回复类型: 
+            <select id="replyType" onchange="toggleReplyFields()">
+              <option value="text">文本回复</option>
+              <option value="photo">图片回复</option>
+              <option value="photo_text">图片+文本回复</option>
             </select>
+          </label>
+        </div>
+        
+        <!-- 文本回复区域 -->
+        <div id="textReplyArea" class="reply-area">
+          <!-- 格式化工具栏 -->
+          <div class="format-toolbar">
+            <button type="button" class="format-btn" onclick="insertFormat('bold')"><b>粗体</b></button>
+            <button type="button" class="format-btn" onclick="insertFormat('italic')"><i>斜体</i></button>
+            <button type="button" class="format-btn" onclick="insertFormat('underline')"><u>下划线</u></button>
+            <button type="button" class="format-btn" onclick="insertFormat('strikethrough')"><s>删除线</s></button>
+            <button type="button" class="format-btn" onclick="insertFormat('code')">代码</button>
+            <button type="button" class="format-btn" onclick="insertFormat('pre')">代码块</button>
+            <button type="button" class="format-btn" onclick="insertFormat('link')">链接</button>
+            <div class="format-mode-select">
+              <select id="formatMode" onchange="updatePreview()">
+                <option value="MarkdownV2">Markdown</option>
+                <option value="HTML">HTML</option>
+              </select>
+            </div>
+          </div>
+          
+          <textarea id="kwReply" placeholder="回复内容" oninput="updatePreview()"></textarea>
+          
+          <!-- 预览区域 -->
+          <div class="preview-container">
+            <h4>预览效果 (Telegram 中的显示)</h4>
+            <div id="previewContent" class="preview-content"></div>
           </div>
         </div>
         
-        <textarea id="kwReply" placeholder="回复内容" oninput="updatePreview()"></textarea>
+        <!-- 图片回复区域 -->
+        <div id="photoReplyArea" class="reply-area" style="display:none;">
+          <label>图片链接(URL)：
+            <input type="text" id="photoUrl" placeholder="https://example.com/image.jpg" oninput="updatePhotoPreview()">
+          </label>
+          <p>支持的图片格式：JPG, JPEG, PNG, GIF, BMP, WEBP</p>
+          <div class="photo-preview-area">
+            <div id="photoPreview"></div>
+          </div>
+        </div>
         
-        <!-- 预览区域 -->
-        <div class="preview-container">
-          <h4>预览效果 (Telegram 中的显示)</h4>
-          <div id="previewContent" class="preview-content"></div>
+        <!-- 图片+文本回复区域 -->
+        <div id="photoTextArea" class="reply-area" style="display:none;">
+          <!-- 格式化工具栏 -->
+          <div class="format-toolbar">
+            <button type="button" class="format-btn" onclick="insertFormatCaption('bold')"><b>粗体</b></button>
+            <button type="button" class="format-btn" onclick="insertFormatCaption('italic')"><i>斜体</i></button>
+            <button type="button" class="format-btn" onclick="insertFormatCaption('underline')"><u>下划线</u></button>
+            <button type="button" class="format-btn" onclick="insertFormatCaption('strikethrough')"><s>删除线</s></button>
+            <button type="button" class="format-btn" onclick="insertFormatCaption('code')">代码</button>
+            <button type="button" class="format-btn" onclick="insertFormatCaption('pre')">代码块</button>
+            <button type="button" class="format-btn" onclick="insertFormatCaption('link')">链接</button>
+          </div>
+          
+          <textarea id="photoCaption" placeholder="图片说明文字" oninput="updateCaptionPreview()"></textarea>
+          
+          <!-- 预览区域 -->
+          <div class="preview-container">
+            <h4>文字预览效果</h4>
+            <div id="photoCaptionPreview" class="preview-content"></div>
+          </div>
         </div>
         
         <button type="submit">添加关键词</button>
@@ -303,7 +371,7 @@
               <td>添加关键词</td>
               <td>POST</td>
               <td>/api/keywords</td>
-              <td>{api_pass, bot_name, type, keyword, reply}</td>
+              <td>{api_pass, bot_name, type, keyword, reply, parse_mode, reply_type, photo_url, caption}</td>
               <td>添加自动回复关键词</td>
             </tr>
             <tr>
@@ -539,6 +607,54 @@
 
       if(fileInput.files.length && fileType){
         // 这里依然调用Telegram上传接口（sendPhoto/sendDocument/sendVideo/sendVoice）
+        const form = new FormData();
+        form.append(fileType, fileInput.files[0]);
+        form.append("chat_id", admin_id);
+        const resUpload = await fetch(`https://api.telegram.org/bot${botToken}/${fileType === "photo" ? "sendPhoto" : fileType === "video" ? "sendVideo" : fileType === "voice" ? "sendVoice" : "sendDocument"}`, {method:"POST", body: form});
+        const data = await resUpload.json();
+        if(fileType === "photo" && data && data.result) fileUrl = data.result.photo[data.result.photo.length-1].file_id;
+        else if(fileType === "document" && data && data.result) fileUrl = data.result.document.file_id;
+        else if(fileType === "video" && data && data.result) fileUrl = data.result.video.file_id;
+        else if(fileType === "voice" && data && data.result) fileUrl = data.result.voice.file_id;
+        if(!fileUrl) {
+          showModal('文件上传失败');
+          return;
+        }
+      }
+
+      const res = await fetch(workerApiBase + "/send", {
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({api_pass,bot_name,admin_id,customer_ids,text,fileType,fileUrl})
+      });
+      const d = await res.json();
+      if(d.ok) showModal('消息已发送!');
+      else {
+        if(d.error === "未授权") {
+          showModal('授权已过期，请重新登录');
+          showLogin();
+        } else {
+          showModal('发送失败:'+(d.error||JSON.stringify(d)));
+        }
+      }
+    };
+
+    // 群发通知
+    document.getElementById('broadcastForm').onsubmit = async (e)=>{
+      e.preventDefault();
+      if (!checkAuth()) return;
+      
+      const bot_name = document.getElementById('broadcastBotSelect').value;
+      const admin_id = document.getElementById('broadcastAdminId').value.trim();
+      const text = document.getElementById('broadcastMsg').value;
+      const fileInput = document.getElementById('broadcastFile');
+      const fileType = document.getElementById('broadcastFileType').value;
+      let fileUrl = "";
+      const botsRes = await fetch(workerApiBase + "/bots");
+      const bots = await botsRes.json();
+      const botToken = bots[bot_name].token;
+
+      if(fileInput.files.length && fileType){
         const form = new FormData();
         form.append(fileType, fileInput.files[0]);
         form.append("chat_id", admin_id);
@@ -874,3 +990,4 @@
   </script>
 </body>
 </html>
+
