@@ -18,6 +18,62 @@
     .delete-btn { color: #fff; background: #e74c3c; border: none; padding: 0.2em 0.7em; border-radius: 3px; margin-left: 1em; cursor:pointer;}
     .blocked-user-item { margin-bottom: 0.2em; padding: 0.3em; border-bottom: 1px solid #eee; }
     .unblock-btn { background: #2ecc71; color: #fff; border: none; padding: 0.2em 0.7em; border-radius: 3px; cursor: pointer; }
+    
+    /* 格式化工具栏样式 */
+    .format-toolbar {
+      margin-bottom: 10px;
+      padding: 5px;
+      background: #f5f5f5;
+      border-radius: 4px;
+      display: flex;
+      flex-wrap: wrap;
+    }
+    .format-btn {
+      margin: 2px;
+      padding: 5px 10px;
+      background: #fff;
+      border: 1px solid #ccc;
+      border-radius: 3px;
+      cursor: pointer;
+      font-size: 14px;
+    }
+    .format-btn:hover {
+      background: #e9e9e9;
+    }
+    .format-mode-select {
+      margin-left: auto;
+      padding: 5px;
+    }
+    
+    /* 预览区域样式 */
+    .preview-container {
+      margin-top: 10px;
+      border: 1px solid #ddd;
+      padding: 10px;
+      border-radius: 4px;
+      background: #f9f9f9;
+    }
+    .preview-container h4 {
+      margin-top: 0;
+      border-bottom: 1px solid #eee;
+      padding-bottom: 5px;
+      color: #555;
+    }
+    .preview-content {
+      min-height: 50px;
+      padding: 10px;
+      background: white;
+      border-radius: 4px;
+      white-space: pre-wrap;
+    }
+    
+    /* 格式化标记样式 */
+    .bold { font-weight: bold; }
+    .italic { font-style: italic; }
+    .underline { text-decoration: underline; }
+    .strikethrough { text-decoration: line-through; }
+    .code { font-family: monospace; background: #f0f0f0; padding: 2px 4px; border-radius: 3px; }
+    .link { color: #2980b9; }
   </style>
 </head>
 <body>
@@ -102,7 +158,32 @@
           <option value="contain">模糊匹配</option>
         </select>
         <input type="text" id="kwKey" placeholder="关键词">
-        <input type="text" id="kwReply" placeholder="回复内容">
+        
+        <!-- 格式化工具栏 -->
+        <div class="format-toolbar">
+          <button type="button" class="format-btn" onclick="insertFormat('bold')"><b>B</b></button>
+          <button type="button" class="format-btn" onclick="insertFormat('italic')"><i>I</i></button>
+          <button type="button" class="format-btn" onclick="insertFormat('underline')"><u>U</u></button>
+          <button type="button" class="format-btn" onclick="insertFormat('strikethrough')"><s>S</s></button>
+          <button type="button" class="format-btn" onclick="insertFormat('code')">Code</button>
+          <button type="button" class="format-btn" onclick="insertFormat('pre')">Pre</button>
+          <button type="button" class="format-btn" onclick="insertFormat('link')">Link</button>
+          <div class="format-mode-select">
+            <select id="formatMode" onchange="updatePreview()">
+              <option value="markdown">Markdown</option>
+              <option value="html">HTML</option>
+            </select>
+          </div>
+        </div>
+        
+        <textarea id="kwReply" placeholder="回复内容" oninput="updatePreview()"></textarea>
+        
+        <!-- 预览区域 -->
+        <div class="preview-container">
+          <h4>预览效果 (Telegram 中的显示)</h4>
+          <div id="previewContent" class="preview-content"></div>
+        </div>
+        
         <button type="submit">添加关键词</button>
       </form>
       <div id="kwList"></div>
@@ -259,6 +340,16 @@
     const workerApiBase = "https://telegram-bot-api.shunjianboy-e0e.workers.dev/api";
     let api_pass = localStorage.getItem('adminApiPass') || "";
 
+    // 检查授权状态函数
+    function checkAuth() {
+      if (!api_pass) {
+        showModal('授权已过期，请重新登录');
+        showLogin();
+        return false;
+      }
+      return true;
+    }
+
     function showMain() {
       document.getElementById('loginBox').style.display = 'none';
       document.getElementById('mainBox').style.display = '';
@@ -294,6 +385,8 @@
 
     let botsCache = {};
     async function loadBots() {
+      if (!checkAuth()) return;
+      
       const res = await fetch(workerApiBase + "/bots");
       const bots = await res.json();
       botsCache = bots;
@@ -316,6 +409,8 @@
       loadBlockedUsers();
     }
     async function deleteBot(bot_name) {
+      if (!checkAuth()) return;
+      
       if(!confirm('确定要删除Bot：'+bot_name+'？')) return;
       const res = await fetch(workerApiBase + "/bots", {
         method:"DELETE",
@@ -327,11 +422,18 @@
         showModal('Bot已删除!');
         loadBots();
       } else {
-        showModal('删除失败:'+d.error);
+        if(d.error === "未授权") {
+          showModal('授权已过期，请重新登录');
+          showLogin();
+        } else {
+          showModal('删除失败:'+d.error);
+        }
       }
     }
     document.getElementById('botForm').onsubmit = async (e)=>{
       e.preventDefault();
+      if (!checkAuth()) return;
+      
       const bot_name = document.getElementById('bot_name').value;
       const token = document.getElementById('bot_token').value;
       const admins = document.getElementById('admin_ids').value.split(",").map(v=>v.trim()).filter(Boolean);
@@ -345,11 +447,18 @@
         showModal('Bot配置成功!');
         loadBots();
       } else {
-        showModal('配置失败:'+d.error);
+        if(d.error === "未授权") {
+          showModal('授权已过期，请重新登录');
+          showLogin();
+        } else {
+          showModal('配置失败:'+d.error);
+        }
       }
     };
 
     async function loadCustomers() {
+      if (!checkAuth()) return;
+      
       const bot_name = document.getElementById('botSelect').value;
       const res = await fetch(workerApiBase + `/customers/${encodeURIComponent(bot_name)}`);
       const list = await res.json();
@@ -363,6 +472,8 @@
 
     // 加载已停用机器人的用户列表
     async function loadBlockedUsers() {
+      if (!checkAuth()) return;
+      
       const bot_name = document.getElementById('blockedBotSelect').value;
       if (!bot_name) return;
       
@@ -387,6 +498,8 @@
 
     // 移除用户的停用标记
     async function unblockUser(bot_name, user_id) {
+      if (!checkAuth()) return;
+      
       if (!confirm(`确定要移除用户 ${user_id} 的停用标记吗？`)) return;
       
       const res = await fetch(workerApiBase + "/blocked", {
@@ -400,12 +513,19 @@
         showModal(`用户 ${user_id} 的停用标记已移除`);
         loadBlockedUsers();
       } else {
-        showModal('操作失败: ' + (data.error || '未知错误'));
+        if(data.error === "未授权") {
+          showModal('授权已过期，请重新登录');
+          showLogin();
+        } else {
+          showModal('操作失败: ' + (data.error || '未知错误'));
+        }
       }
     }
 
     document.getElementById('sendForm').onsubmit = async (e)=>{
       e.preventDefault();
+      if (!checkAuth()) return;
+      
       const bot_name = document.getElementById('sendBotSelect').value;
       const admin_id = document.getElementById('sendAdminId').value.trim();
       const customer_ids = document.getElementById('sendCustomerIds').value.split(",").map(v=>v.trim()).filter(Boolean);
@@ -441,12 +561,21 @@
       });
       const d = await res.json();
       if(d.ok) showModal('消息已发送!');
-      else showModal('发送失败:'+(d.error||JSON.stringify(d)));
+      else {
+        if(d.error === "未授权") {
+          showModal('授权已过期，请重新登录');
+          showLogin();
+        } else {
+          showModal('发送失败:'+(d.error||JSON.stringify(d)));
+        }
+      }
     };
 
     // 群发通知
     document.getElementById('broadcastForm').onsubmit = async (e)=>{
       e.preventDefault();
+      if (!checkAuth()) return;
+      
       const bot_name = document.getElementById('broadcastBotSelect').value;
       const admin_id = document.getElementById('broadcastAdminId').value.trim();
       const text = document.getElementById('broadcastMsg').value;
@@ -480,11 +609,20 @@
       });
       const d = await res.json();
       if(d.ok) showModal('群发成功！本次发送：'+d.count+'人');
-      else showModal('群发失败:'+(d.error||JSON.stringify(d)));
+      else {
+        if(d.error === "未授权") {
+          showModal('授权已过期，请重新登录');
+          showLogin();
+        } else {
+          showModal('群发失败:'+(d.error||JSON.stringify(d)));
+        }
+      }
     };
 
     // 关键词自动回复
     async function loadKeywords() {
+      if (!checkAuth()) return;
+      
       const bot_name = document.getElementById('kwBotSelect').value;
       const res = await fetch(workerApiBase + `/keywords?bot_name=${encodeURIComponent(bot_name)}`);
       const keywords = await res.json();
@@ -496,37 +634,62 @@
       html += '</ul>';
       document.getElementById('kwList').innerHTML = html;
     }
+    
     document.getElementById('kwForm').onsubmit = async (e)=>{
       e.preventDefault();
+      if (!checkAuth()) return;
+      
       const bot_name = document.getElementById('kwBotSelect').value;
       const type = document.getElementById('kwType').value;
       const keyword = document.getElementById('kwKey').value.trim();
       const reply = document.getElementById('kwReply').value.trim();
       if(!keyword||!reply) return showModal('关键词和回复内容必填');
+      
+      // 添加 parse_mode 参数，指定解析模式
+      const formatMode = document.getElementById('formatMode').value;
+      
       const res = await fetch(workerApiBase + "/keywords", {
         method:"POST",
         headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({api_pass,bot_name,type,keyword,reply})
+        body:JSON.stringify({
+          api_pass, 
+          bot_name, 
+          type, 
+          keyword, 
+          reply,
+          parse_mode: formatMode // 添加解析模式参数
+        })
       });
       const d = await res.json();
       if(d.ok) {
         showModal('添加成功');
         loadKeywords();
       } else {
-        showModal('添加失败:'+d.error);
+        if(d.error === "未授权") {
+          showModal('授权已过期，请重新登录');
+          showLogin();
+        } else {
+          showModal('添加失败:'+d.error);
+        }
       }
     };
     
-    // 修复后的关键词删除函数 - 添加了async/await并处理响应结果
+    // 修复后的关键词删除函数 - 确保刷新授权状态并正确处理错误
     async function deleteKeyword(idx) {
+      // 先检查授权是否有效
+      if (!checkAuth()) return;
+      
       const bot_name = document.getElementById('kwBotSelect').value;
       if(!confirm('确定删除该关键词？')) return;
       
       try {
+        // 重新获取最新的 api_pass，确保使用最新的授权信息
+        const currentApiPass = localStorage.getItem('adminApiPass') || "";
+        
         const res = await fetch(workerApiBase + "/keywords", {
           method: "DELETE",
           headers: {"Content-Type": "application/json"},
-          body: JSON.stringify({api_pass, bot_name, idx})
+          body: JSON.stringify({api_pass: currentApiPass, bot_name, idx})
         });
         
         const data = await res.json();
@@ -534,7 +697,13 @@
           showModal('关键词删除成功');
           loadKeywords(); // 刷新关键词列表
         } else {
-          showModal('删除失败: ' + (data.error || '未知错误'));
+          // 检查是否是授权问题
+          if(data.error === "未授权") {
+            showModal('授权已过期，请重新登录');
+            showLogin();
+          } else {
+            showModal('删除失败: ' + (data.error || '未知错误'));
+          }
         }
       } catch(e) {
         showModal('删除出错: ' + (e.message || '请求失败'));
@@ -543,6 +712,8 @@
 
     // 启动消息管理
     async function loadStartMsg() {
+      if (!checkAuth()) return;
+      
       const bot_name = document.getElementById('startMsgBotSelect').value;
       if(!bot_name) return;
       const res = await fetch(workerApiBase + `/startmsg?bot_name=${encodeURIComponent(bot_name)}`);
@@ -554,6 +725,8 @@
     document.getElementById('startMsgBotSelect').onchange = loadStartMsg;
     document.getElementById('startMsgForm').onsubmit = async (e)=>{
       e.preventDefault();
+      if (!checkAuth()) return;
+      
       const bot_name = document.getElementById('startMsgBotSelect').value;
       const type = document.getElementById('startMsgType').value;
       const caption = document.getElementById('startMsgText').value;
@@ -569,15 +742,134 @@
       });
       const d = await res.json();
       if(d.ok) showModal('启动消息已保存');
-      else showModal('保存失败:'+d.error);
+      else {
+        if(d.error === "未授权") {
+          showModal('授权已过期，请重新登录');
+          showLogin();
+        } else {
+          showModal('保存失败:'+d.error);
+        }
+      }
     };
 
     // 已停用用户管理
     document.getElementById('blockedBotSelect').onchange = loadBlockedUsers;
+    
+    // ======= 新增格式化相关函数 =======
+    
+    // 在光标位置插入格式化标记
+    function insertFormat(type) {
+      const textarea = document.getElementById('kwReply');
+      const formatMode = document.getElementById('formatMode').value;
+      const startPos = textarea.selectionStart;
+      const endPos = textarea.selectionEnd;
+      const selectedText = textarea.value.substring(startPos, endPos);
+      let insertText = '';
+      
+      if (formatMode === 'markdown') {
+        switch(type) {
+          case 'bold':
+            insertText = `*${selectedText || '粗体文字'}*`;
+            break;
+          case 'italic':
+            insertText = `_${selectedText || '斜体文字'}_`;
+            break;
+          case 'underline':
+            insertText = `__${selectedText || '下划线文字'}__`;
+            break;
+          case 'strikethrough':
+            insertText = `~${selectedText || '删除线文字'}~`;
+            break;
+          case 'code':
+            insertText = '`' + (selectedText || '代码') + '`';
+            break;
+          case 'pre':
+            insertText = '```\n' + (selectedText || '代码块\n示例代码') + '\n```';
+            break;
+          case 'link':
+            if (selectedText) {
+              insertText = `[${selectedText}](https://example.com)`;
+            } else {
+              insertText = '[链接文字](https://example.com)';
+            }
+            break;
+        }
+      } else if (formatMode === 'html') {
+        switch(type) {
+          case 'bold':
+            insertText = `<b>${selectedText || '粗体文字'}</b>`;
+            break;
+          case 'italic':
+            insertText = `<i>${selectedText || '斜体文字'}</i>`;
+            break;
+          case 'underline':
+            insertText = `<u>${selectedText || '下划线文字'}</u>`;
+            break;
+          case 'strikethrough':
+            insertText = `<s>${selectedText || '删除线文字'}</s>`;
+            break;
+          case 'code':
+            insertText = `<code>${selectedText || '代码'}</code>`;
+            break;
+          case 'pre':
+            insertText = `<pre>${selectedText || '代码块\n示例代码'}</pre>`;
+            break;
+          case 'link':
+            if (selectedText) {
+              insertText = `<a href="https://example.com">${selectedText}</a>`;
+            } else {
+              insertText = '<a href="https://example.com">链接文字</a>';
+            }
+            break;
+        }
+      }
+      
+      // 插入文本到光标位置
+      textarea.value = textarea.value.substring(0, startPos) + insertText + textarea.value.substring(endPos);
+      
+      // 更新光标位置 (放在插入的文本后面)
+      const newPos = startPos + insertText.length;
+      textarea.selectionStart = newPos;
+      textarea.selectionEnd = newPos;
+      
+      // 更新预览
+      updatePreview();
+      
+      // 聚焦回文本框
+      textarea.focus();
+    }
+    
+    // 更新预览内容
+    function updatePreview() {
+      const textarea = document.getElementById('kwReply');
+      const text = textarea.value;
+      const formatMode = document.getElementById('formatMode').value;
+      const previewDiv = document.getElementById('previewContent');
+      
+      // 简单预览 (不是完全准确，仅供参考)
+      if (formatMode === 'markdown') {
+        // 处理Markdown格式
+        let html = text
+          .replace(/\*\*(.*?)\*\*|\*(.*?)\*/g, '<b>$1$2</b>')
+          .replace(/__(.*?)__/g, '<u>$1</u>')
+          .replace(/_(.*?)_/g, '<i>$1</i>')
+          .replace(/~(.*?)~/g, '<s>$1</s>')
+          .replace(/`(.*?)`/g, '<code>$1</code>')
+          .replace(/```([\s\S]*?)```/g, '<pre>$1</pre>')
+          .replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" class="link">$1</a>');
+          
+        previewDiv.innerHTML = html;
+      } else {
+        // HTML格式直接显示
+        previewDiv.innerHTML = text;
+      }
+    }
 
     window.onload = function(){
       if(api_pass) showMain();
       else showLogin();
+      // 初始化预览
+      updatePreview();
     }
   </script>
 </body>
