@@ -516,15 +516,29 @@
         showModal('添加失败:'+d.error);
       }
     };
+    
+    // 修复后的关键词删除函数 - 添加了async/await并处理响应结果
     async function deleteKeyword(idx) {
       const bot_name = document.getElementById('kwBotSelect').value;
       if(!confirm('确定删除该关键词？')) return;
-      await fetch(workerApiBase + "/keywords", {
-        method:"DELETE",
-        headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({api_pass,bot_name,idx})
-      });
-      loadKeywords();
+      
+      try {
+        const res = await fetch(workerApiBase + "/keywords", {
+          method: "DELETE",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({api_pass, bot_name, idx})
+        });
+        
+        const data = await res.json();
+        if(data.ok) {
+          showModal('关键词删除成功');
+          loadKeywords(); // 刷新关键词列表
+        } else {
+          showModal('删除失败: ' + (data.error || '未知错误'));
+        }
+      } catch(e) {
+        showModal('删除出错: ' + (e.message || '请求失败'));
+      }
     }
 
     // 启动消息管理
