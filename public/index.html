@@ -195,10 +195,10 @@
         <div id="textReplyArea" class="reply-area">
           <!-- 格式化工具栏 -->
           <div class="format-toolbar">
-            <button type="button" class="format-btn" onclick="insertFormat('bold')"><b>粗体</b></button>
-            <button type="button" class="format-btn" onclick="insertFormat('italic')"><i>斜体</i></button>
-            <button type="button" class="format-btn" onclick="insertFormat('underline')"><u>下划线</u></button>
-            <button type="button" class="format-btn" onclick="insertFormat('strikethrough')"><s>删除线</s></button>
+            <button type="button" class="format-btn" onclick="insertFormat('bold')">粗体</button>
+            <button type="button" class="format-btn" onclick="insertFormat('italic')">斜体</button>
+            <button type="button" class="format-btn" onclick="insertFormat('underline')">下划线</button>
+            <button type="button" class="format-btn" onclick="insertFormat('strikethrough')">删除线</button>
             <button type="button" class="format-btn" onclick="insertFormat('code')">代码</button>
             <button type="button" class="format-btn" onclick="insertFormat('pre')">代码块</button>
             <button type="button" class="format-btn" onclick="insertFormat('link')">链接</button>
@@ -234,10 +234,10 @@
         <div id="photoTextArea" class="reply-area" style="display:none;">
           <!-- 格式化工具栏 -->
           <div class="format-toolbar">
-            <button type="button" class="format-btn" onclick="insertFormatCaption('bold')"><b>粗体</b></button>
-            <button type="button" class="format-btn" onclick="insertFormatCaption('italic')"><i>斜体</i></button>
-            <button type="button" class="format-btn" onclick="insertFormatCaption('underline')"><u>下划线</u></button>
-            <button type="button" class="format-btn" onclick="insertFormatCaption('strikethrough')"><s>删除线</s></button>
+            <button type="button" class="format-btn" onclick="insertFormatCaption('bold')">粗体</button>
+            <button type="button" class="format-btn" onclick="insertFormatCaption('italic')">斜体</button>
+            <button type="button" class="format-btn" onclick="insertFormatCaption('underline')">下划线</button>
+            <button type="button" class="format-btn" onclick="insertFormatCaption('strikethrough')">删除线</button>
             <button type="button" class="format-btn" onclick="insertFormatCaption('code')">代码</button>
             <button type="button" class="format-btn" onclick="insertFormatCaption('pre')">代码块</button>
             <button type="button" class="format-btn" onclick="insertFormatCaption('link')">链接</button>
@@ -670,54 +670,6 @@
         }
       }
 
-      const res = await fetch(workerApiBase + "/send", {
-        method:"POST",
-        headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({api_pass,bot_name,admin_id,customer_ids,text,fileType,fileUrl})
-      });
-      const d = await res.json();
-      if(d.ok) showModal('消息已发送!');
-      else {
-        if(d.error === "未授权") {
-          showModal('授权已过期，请重新登录');
-          showLogin();
-        } else {
-          showModal('发送失败:'+(d.error||JSON.stringify(d)));
-        }
-      }
-    };
-
-    // 群发通知
-    document.getElementById('broadcastForm').onsubmit = async (e)=>{
-      e.preventDefault();
-      if (!checkAuth()) return;
-      
-      const bot_name = document.getElementById('broadcastBotSelect').value;
-      const admin_id = document.getElementById('broadcastAdminId').value.trim();
-      const text = document.getElementById('broadcastMsg').value;
-      const fileInput = document.getElementById('broadcastFile');
-      const fileType = document.getElementById('broadcastFileType').value;
-      let fileUrl = "";
-      const botsRes = await fetch(workerApiBase + "/bots");
-      const bots = await botsRes.json();
-      const botToken = bots[bot_name].token;
-
-      if(fileInput.files.length && fileType){
-        const form = new FormData();
-        form.append(fileType, fileInput.files[0]);
-        form.append("chat_id", admin_id);
-        const resUpload = await fetch(`https://api.telegram.org/bot${botToken}/${fileType === "photo" ? "sendPhoto" : fileType === "video" ? "sendVideo" : fileType === "voice" ? "sendVoice" : "sendDocument"}`, {method:"POST", body: form});
-        const data = await resUpload.json();
-        if(fileType === "photo" && data && data.result) fileUrl = data.result.photo[data.result.photo.length-1].file_id;
-        else if(fileType === "document" && data && data.result) fileUrl = data.result.document.file_id;
-        else if(fileType === "video" && data && data.result) fileUrl = data.result.video.file_id;
-        else if(fileType === "voice" && data && data.result) fileUrl = data.result.voice.file_id;
-        if(!fileUrl) {
-          showModal('文件上传失败');
-          return;
-        }
-      }
-
       const res = await fetch(workerApiBase + "/broadcast", {
         method:"POST",
         headers:{"Content-Type":"application/json"},
@@ -742,13 +694,33 @@
       const bot_name = document.getElementById('kwBotSelect').value;
       const res = await fetch(workerApiBase + `/keywords?bot_name=${encodeURIComponent(bot_name)}`);
       const keywords = await res.json();
-      let html = '<ul>';
+      let html = '<ul style="list-style-type:none; padding:0;">';
+      
       for(const [i, kw] of keywords.entries()) {
-        html += `<li>[${kw.type==='equal'?'精准':'模糊'}] <b>${kw.keyword}</b> → ${kw.reply}
-          <button onclick="deleteKeyword(${i})">删除</button></li>`;
+        let replyContent = '';
+        
+        // 根据回复类型显示不同内容
+        if (kw.reply_type === 'photo' || kw.reply_type === 'photo_text') {
+          replyContent = `<div>
+            <img src="${kw.photo_url}" style="max-width:100px; max-height:80px; margin:5px 0;">
+            ${kw.caption ? `<div>${kw.caption}</div>` : ''}
+          </div>`;
+        } else {
+          // 默认文本回复
+          replyContent = `<div>${kw.reply || ''}</div>`;
+        }
+        
+        html += `<li style="padding:10px; margin:5px 0; border:1px solid #eee; border-radius:5px;">
+          <div><b>[${kw.type === 'equal' ? '精准' : '模糊'}]</b> 关键词: <b>${kw.keyword}</b></div>
+          <div>回复类型: ${kw.reply_type === 'text' ? '文本' : kw.reply_type === 'photo' ? '图片' : '图片+文本'}</div>
+          ${kw.parse_mode ? `<div>格式化: ${kw.parse_mode}</div>` : ''}
+          <div style="margin-top:5px;">回复内容: ${replyContent}</div>
+          <button onclick="deleteKeyword(${i})" style="margin-top:5px;">删除</button>
+        </li>`;
       }
+      
       html += '</ul>';
-      document.getElementById('kwList').innerHTML = html;
+      document.getElementById('kwList').innerHTML = html || '<p>暂无关键词</p>';
     }
     
     document.getElementById('kwForm').onsubmit = async (e)=>{
@@ -758,23 +730,44 @@
       const bot_name = document.getElementById('kwBotSelect').value;
       const type = document.getElementById('kwType').value;
       const keyword = document.getElementById('kwKey').value.trim();
-      const reply = document.getElementById('kwReply').value.trim();
-      if(!keyword||!reply) return showModal('关键词和回复内容必填');
+      const replyType = document.getElementById('replyType').value;
       
-      // 添加 parse_mode 参数，指定解析模式
-      const formatMode = document.getElementById('formatMode').value;
+      // 构建请求数据
+      const requestData = {
+        api_pass,
+        bot_name,
+        type,
+        keyword,
+        reply_type: replyType
+      };
+      
+      // 根据回复类型添加不同字段
+      if (replyType === 'text') {
+        const reply = document.getElementById('kwReply').value.trim();
+        const formatMode = document.getElementById('formatMode').value;
+        if (!reply) return showModal('回复内容必填');
+        requestData.reply = reply;
+        requestData.parse_mode = formatMode;
+      } 
+      else if (replyType === 'photo') {
+        const photoUrl = document.getElementById('photoUrl').value.trim();
+        if (!photoUrl) return showModal('图片URL必填');
+        requestData.photo_url = photoUrl;
+      } 
+      else if (replyType === 'photo_text') {
+        const photoUrl = document.getElementById('photoUrl').value.trim();
+        const caption = document.getElementById('photoCaption').value.trim();
+        const formatMode = document.getElementById('formatMode').value;
+        if (!photoUrl) return showModal('图片URL必填');
+        requestData.photo_url = photoUrl;
+        requestData.caption = caption;
+        requestData.parse_mode = formatMode;
+      }
       
       const res = await fetch(workerApiBase + "/keywords", {
         method:"POST",
         headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({
-          api_pass, 
-          bot_name, 
-          type, 
-          keyword, 
-          reply,
-          parse_mode: formatMode // 添加解析模式参数
-        })
+        body:JSON.stringify(requestData)
       });
       const d = await res.json();
       if(d.ok) {
@@ -871,9 +864,32 @@
     // 已停用用户管理
     document.getElementById('blockedBotSelect').onchange = loadBlockedUsers;
     
-    // ======= 新增格式化相关函数 =======
+    // ======= 格式化相关函数 =======
     
-    // 在光标位置插入格式化标记
+    // 切换不同回复类型的显示
+    function toggleReplyFields() {
+      const replyType = document.getElementById('replyType').value;
+      const textArea = document.getElementById('textReplyArea');
+      const photoArea = document.getElementById('photoReplyArea');
+      const photoTextArea = document.getElementById('photoTextArea');
+      
+      // 默认都隐藏
+      textArea.style.display = 'none';
+      photoArea.style.display = 'none';
+      photoTextArea.style.display = 'none';
+      
+      // 根据选择显示对应区域
+      if (replyType === 'text') {
+        textArea.style.display = 'block';
+      } else if (replyType === 'photo') {
+        photoArea.style.display = 'block';
+      } else if (replyType === 'photo_text') {
+        photoArea.style.display = 'block';
+        photoTextArea.style.display = 'block';
+      }
+    }
+    
+    // 文本格式化插入 - 修复版本
     function insertFormat(type) {
       const textarea = document.getElementById('kwReply');
       const formatMode = document.getElementById('formatMode').value;
@@ -882,7 +898,7 @@
       const selectedText = textarea.value.substring(startPos, endPos);
       let insertText = '';
       
-      if (formatMode === 'markdown') {
+      if (formatMode === 'MarkdownV2') {
         switch(type) {
           case 'bold':
             insertText = `*${selectedText || '粗体文字'}*`;
@@ -910,7 +926,7 @@
             }
             break;
         }
-      } else if (formatMode === 'html') {
+      } else if (formatMode === 'HTML') {
         switch(type) {
           case 'bold':
             insertText = `<b>${selectedText || '粗体文字'}</b>`;
@@ -955,6 +971,101 @@
       textarea.focus();
     }
     
+    // 图片说明文字格式化插入
+    function insertFormatCaption(type) {
+      const textarea = document.getElementById('photoCaption');
+      const formatMode = document.getElementById('formatMode').value;
+      const startPos = textarea.selectionStart;
+      const endPos = textarea.selectionEnd;
+      const selectedText = textarea.value.substring(startPos, endPos);
+      let insertText = '';
+      
+      if (formatMode === 'MarkdownV2') {
+        switch(type) {
+          case 'bold':
+            insertText = `*${selectedText || '粗体文字'}*`;
+            break;
+          case 'italic':
+            insertText = `_${selectedText || '斜体文字'}_`;
+            break;
+          case 'underline':
+            insertText = `__${selectedText || '下划线文字'}__`;
+            break;
+          case 'strikethrough':
+            insertText = `~${selectedText || '删除线文字'}~`;
+            break;
+          case 'code':
+            insertText = '`' + (selectedText || '代码') + '`';
+            break;
+          case 'pre':
+            insertText = '```\n' + (selectedText || '代码块\n示例代码') + '\n```';
+            break;
+          case 'link':
+            if (selectedText) {
+              insertText = `[${selectedText}](https://example.com)`;
+            } else {
+              insertText = '[链接文字](https://example.com)';
+            }
+            break;
+        }
+      } else if (formatMode === 'HTML') {
+        switch(type) {
+          case 'bold':
+            insertText = `<b>${selectedText || '粗体文字'}</b>`;
+            break;
+          case 'italic':
+            insertText = `<i>${selectedText || '斜体文字'}</i>`;
+            break;
+          case 'underline':
+            insertText = `<u>${selectedText || '下划线文字'}</u>`;
+            break;
+          case 'strikethrough':
+            insertText = `<s>${selectedText || '删除线文字'}</s>`;
+            break;
+          case 'code':
+            insertText = `<code>${selectedText || '代码'}</code>`;
+            break;
+          case 'pre':
+            insertText = `<pre>${selectedText || '代码块\n示例代码'}</pre>`;
+            break;
+          case 'link':
+            if (selectedText) {
+              insertText = `<a href="https://example.com">${selectedText}</a>`;
+            } else {
+              insertText = '<a href="https://example.com">链接文字</a>';
+            }
+            break;
+        }
+      }
+      
+      // 插入文本到光标位置
+      textarea.value = textarea.value.substring(0, startPos) + insertText + textarea.value.substring(endPos);
+      
+      // 更新光标位置
+      const newPos = startPos + insertText.length;
+      textarea.selectionStart = newPos;
+      textarea.selectionEnd = newPos;
+      
+      // 更新预览
+      updateCaptionPreview();
+      
+      // 聚焦回文本框
+      textarea.focus();
+    }
+    
+    // 更新图片预览
+    function updatePhotoPreview() {
+      const photoUrl = document.getElementById('photoUrl').value.trim();
+      const photoPreview = document.getElementById('photoPreview');
+      
+      if (photoUrl) {
+        photoPreview.innerHTML = `<img src="${photoUrl}" style="max-width:100%; max-height:300px;" 
+          onerror="this.onerror=null; this.alt='加载图片失败'; this.style.border='1px solid red'; this.style.padding='10px';">`;
+      } else {
+        photoPreview.innerHTML = '<p>请输入有效的图片URL</p>';
+      }
+    }
+    
     // 更新预览内容
     function updatePreview() {
       const textarea = document.getElementById('kwReply');
@@ -963,7 +1074,7 @@
       const previewDiv = document.getElementById('previewContent');
       
       // 简单预览 (不是完全准确，仅供参考)
-      if (formatMode === 'markdown') {
+      if (formatMode === 'MarkdownV2') {
         // 处理Markdown格式
         let html = text
           .replace(/\*\*(.*?)\*\*|\*(.*?)\*/g, '<b>$1$2</b>')
@@ -980,14 +1091,38 @@
         previewDiv.innerHTML = text;
       }
     }
+    
+    // 更新图片说明文字预览
+    function updateCaptionPreview() {
+      const textarea = document.getElementById('photoCaption');
+      const text = textarea.value;
+      const formatMode = document.getElementById('formatMode').value;
+      const previewDiv = document.getElementById('photoCaptionPreview');
+      
+      if (formatMode === 'MarkdownV2') {
+        let html = text
+          .replace(/\*\*(.*?)\*\*|\*(.*?)\*/g, '<b>$1$2</b>')
+          .replace(/__(.*?)__/g, '<u>$1</u>')
+          .replace(/_(.*?)_/g, '<i>$1</i>')
+          .replace(/~(.*?)~/g, '<s>$1</s>')
+          .replace(/`(.*?)`/g, '<code>$1</code>')
+          .replace(/```([\s\S]*?)```/g, '<pre>$1</pre>')
+          .replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" class="link">$1</a>');
+          
+        previewDiv.innerHTML = html;
+      } else {
+        previewDiv.innerHTML = text;
+      }
+    }
 
+    // 初始化
     window.onload = function(){
       if(api_pass) showMain();
       else showLogin();
-      // 初始化预览
+      // 初始化显示状态
+      toggleReplyFields();
       updatePreview();
     }
   </script>
 </body>
 </html>
-
