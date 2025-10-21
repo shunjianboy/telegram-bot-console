@@ -182,9 +182,20 @@ code {
   padding-right: 30px;
 }
 
+/* 修改文本区域样式，增加默认高度 */
 .textarea-styled {
-  min-height: 120px;
-  resize: vertical;
+  min-height: 180px;  /* 增加最小高度 */
+  resize: vertical;   /* 保持垂直可调整大小 */
+  line-height: 1.5;
+  padding: 12px;
+  font-size: 15px;    /* 略微增大字体 */
+}
+
+/* 特别针对关键词回复文本框的调整 */
+#kwReply, #photoCaption, #startMsgText, #sendMsg, #broadcastMsg {
+  min-height: 200px;
+  height: auto;       /* 允许自动扩展高度 */
+  width: 100%;        /* 确保宽度填满容器 */
 }
 
 .file-upload-group .file-controls {
@@ -552,7 +563,7 @@ code {
   margin-left: auto;
 }
 
-/* 预览容器样式 */
+/* 预览容器样式调整 */
 .preview-container {
   margin-top: var(--spacing-md);
   border: 1px solid var(--border-color);
@@ -573,7 +584,7 @@ code {
 }
 
 .preview-content {
-  min-height: 100px;
+  min-height: 180px;  /* 与文本框保持一致的高度 */
   padding: var(--spacing-md);
   background: white;
   white-space: pre-wrap;
@@ -697,4 +708,5 @@ code {
   .file-upload-group .file-controls {
     flex-direction: column;
   }
+
 }
