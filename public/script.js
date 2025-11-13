@@ -87,13 +87,16 @@ async function loadBots() {
     document.getElementById('botsDiv').innerHTML = html || '<p class="hint-text">暂无配置的Bot</p>';
     
     // 更新所有Bot选择器
-    const options = Object.keys(bots).map(k => `<option value="${k}">${k}</option>`).join('');
-    document.getElementById('botSelect').innerHTML = options;
-    document.getElementById('sendBotSelect').innerHTML = options;
-    document.getElementById('broadcastBotSelect').innerHTML = options;
-    document.getElementById('kwBotSelect').innerHTML = options;
-    document.getElementById('startMsgBotSelect').innerHTML = options;
-    document.getElementById('blockedBotSelect').innerHTML = options;
+	const options = Object.keys(bots).map(k => `<option value="${k}">${k}</option>`).join('');
+	document.getElementById('botSelect').innerHTML = options;
+	document.getElementById('sendBotSelect').innerHTML = options;
+	document.getElementById('broadcastBotSelect').innerHTML = options;
+	document.getElementById('kwBotSelect').innerHTML = options;
+	document.getElementById('startMsgBotSelect').innerHTML = options;
+	document.getElementById('blockedBotSelect').innerHTML = options;
+	// 🆕 新增：黑名单选择器
+	document.getElementById('blacklistBotSelect').innerHTML = options;
+	document.getElementById('blacklistViewBotSelect').innerHTML = options;
     
     // 加载其他相关数据
     loadStartMsg();
@@ -152,17 +155,23 @@ async function loadCustomers() {
       return;
     }
     
-    let html = '<ul>';
-    for(const id of list){
-      html += `
-        <li>
-          <span class="chat-id-mask">${id}</span>
-          <button class="btn btn-secondary" onclick="document.getElementById('sendCustomerIds').value='${id}';">
-            <i class="fas fa-user-plus"></i> 填入
-          </button>
-        </li>`;
-    }
-    html += '</ul>';
+	// 🆕 修改显示格式，添加快速拉黑按钮
+	let html = '<div class="customer-grid">';
+	for(const id of list){
+	  html += `
+		<div class="customer-item">
+		  <code>${id}</code>
+		  <div class="customer-actions">
+			<button class="btn btn-secondary" onclick="document.getElementById('sendCustomerIds').value='${id}';" title="填入发送框">
+			  <i class="fas fa-user-plus"></i> 填入
+			</button>
+			<button class="btn btn-danger btn-sm" onclick="quickBlacklist('${bot_name}', '${id}')" title="拉黑用户">
+			  <i class="fas fa-ban"></i> 拉黑
+			</button>
+		  </div>
+		</div>`;
+	}
+	html += '</div>';
     document.getElementById('customersDiv').innerHTML = html;
   } catch (error) {
     showModal('加载客户ID列表失败: ' + error.message);
@@ -849,11 +858,12 @@ function bindEventListeners() {
     }
   };
   
-  // Bot选择器变更事件
-  document.getElementById('startMsgBotSelect').onchange = loadStartMsg;
-  document.getElementById('blockedBotSelect').onchange = loadBlockedUsers;
-  document.getElementById('botSelect').onchange = loadCustomers;
-  document.getElementById('kwBotSelect').onchange = loadKeywords;
+	// Bot选择器变更事件
+	document.getElementById('startMsgBotSelect').onchange = loadStartMsg;
+	document.getElementById('blockedBotSelect').onchange = loadBlockedUsers;
+	document.getElementById('blacklistViewBotSelect').onchange = loadBlacklist;  // 🆕 新增
+	document.getElementById('botSelect').onchange = loadCustomers;
+	document.getElementById('kwBotSelect').onchange = loadKeywords;
 }
 
 // 导航菜单功能
@@ -875,11 +885,12 @@ function initNavigation() {
       sections.forEach(section => {
         if (section.id === targetId) {
           section.style.display = 'block';
-          // 如果是特定部分，可能需要刷新数据
-          if (targetId === 'customerList') loadCustomers();
-          else if (targetId === 'blockedUsers') loadBlockedUsers();
-          else if (targetId === 'keywords') loadKeywords();
-          else if (targetId === 'startMsg') loadStartMsg();
+		// 如果是特定部分，可能需要刷新数据
+		if (targetId === 'customerList') loadCustomers();
+		else if (targetId === 'blockedUsers') loadBlockedUsers();
+		else if (targetId === 'blacklist') loadBlacklist();  // 🆕 新增
+		else if (targetId === 'keywords') loadKeywords();
+		else if (targetId === 'startMsg') loadStartMsg();
         } else {
           section.style.display = 'none';
         }
@@ -902,3 +913,179 @@ window.onload = function() {
   toggleReplyFields();
   updatePreview();
 };
+
+// ========== 黑名单管理功能 ==========
+
+// 加载黑名单列表
+async function loadBlacklist() {
+  if (!checkAuth()) return;
+  
+  const bot_name = document.getElementById('blacklistViewBotSelect').value;
+  if (!bot_name) {
+    document.getElementById('blacklistDiv').innerHTML = '<p class="hint-text">请先选择一个Bot</p>';
+    return;
+  }
+  
+  try {
+    const res = await fetch(workerApiBase + `/blacklist?bot_name=${encodeURIComponent(bot_name)}`);
+    const data = await res.json();
+    
+    if (!Array.isArray(data) || data.length === 0) {
+      document.getElementById('blacklistDiv').innerHTML = '<p class="hint-text"><i class="fas fa-check-circle"></i> 暂无黑名单用户</p>';
+      return;
+    }
+    
+    let html = '<div class="blacklist-items"><table class="data-table">';
+    html += '<thead><tr><th>用户ID</th><th>拉黑原因</th><th>拉黑时间</th><th>操作</th></tr></thead><tbody>';
+    
+    data.forEach((item) => {
+      // 兼容旧格式（纯字符串）和新格式（对象）
+      const userId = typeof item === 'string' ? item : item.user_id;
+      const reason = typeof item === 'object' ? (item.reason || '-') : '手动拉黑';
+      const blockedAt = typeof item === 'object' && item.blocked_at 
+        ? new Date(item.blocked_at).toLocaleString('zh-CN') 
+        : '-';
+      
+      html += `<tr>
+        <td><code>${userId}</code></td>
+        <td>${reason}</td>
+        <td>${blockedAt}</td>
+        <td>
+          <button class="btn btn-success btn-sm" onclick="removeFromBlacklist('${bot_name}','${userId}')">
+            <i class="fas fa-undo"></i> 移除
+          </button>
+        </td>
+      </tr>`;
+    });
+    
+    html += '</tbody></table></div>';
+    document.getElementById('blacklistDiv').innerHTML = html;
+    
+  } catch(e) {
+    showModal("加载黑名单失败: " + e.message);
+  }
+}
+
+// 从黑名单移除
+async function removeFromBlacklist(bot_name, user_id) {
+  if (!checkAuth()) return;
+  
+  if (!confirm(`确定要将用户 ${user_id} 从黑名单移除吗？`)) {
+    return;
+  }
+  
+  try {
+    const res = await fetch(workerApiBase + "/blacklist", {
+      method: "DELETE",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({api_pass, bot_name, user_id})
+    });
+    
+    const result = await res.json();
+    
+    if (result.ok) {
+      showModal("✅ 已从黑名单移除");
+      loadBlacklist();
+    } else {
+      if(result.error === "未授权") {
+        showModal('授权已过期，请重新登录');
+        showLogin();
+      } else {
+        showModal("❌ 移除失败: " + result.error);
+      }
+    }
+  } catch(e) {
+    showModal("请求失败: " + e.message);
+  }
+}
+
+// 快速拉黑函数（用于客户列表页面）
+async function quickBlacklist(bot_name, user_id) {
+  if (!checkAuth()) return;
+  
+  const reason = prompt(`确定要拉黑用户 ${user_id} 吗？\n\n请输入拉黑原因（可选）：`, "发送广告");
+  
+  if (reason === null) {
+    return; // 用户取消
+  }
+  
+  try {
+    const res = await fetch(workerApiBase + "/blacklist", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({
+        api_pass,
+        bot_name,
+        user_id,
+        reason: reason || "手动拉黑"
+      })
+    });
+    
+    const result = await res.json();
+    
+    if (result.ok) {
+      showModal("✅ 已拉黑用户 " + user_id);
+      loadCustomers(); // 刷新客户列表
+    } else {
+      if(result.error === "未授权") {
+        showModal('授权已过期，请重新登录');
+        showLogin();
+      } else {
+        showModal("❌ 拉黑失败: " + result.error);
+      }
+    }
+  } catch(e) {
+    showModal("请求失败: " + e.message);
+  }
+}
+
+// 添加到黑名单表单提交
+document.getElementById('addBlacklistForm').onsubmit = async (e) => {
+  e.preventDefault();
+  if (!checkAuth()) return;
+  
+  const bot_name = document.getElementById('blacklistBotSelect').value;
+  const user_id = document.getElementById('blacklistUserId').value.trim();
+  const reason = document.getElementById('blacklistReason').value.trim();
+  
+  if (!bot_name || !user_id) {
+    showModal("请填写完整信息");
+    return;
+  }
+  
+  try {
+    const res = await fetch(workerApiBase + "/blacklist", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({
+        api_pass,
+        bot_name,
+        user_id,
+        reason: reason || "手动拉黑"
+      })
+    });
+    
+    const result = await res.json();
+    
+    if (result.ok) {
+      showModal("✅ 已添加到黑名单");
+      document.getElementById('blacklistUserId').value = "";
+      document.getElementById('blacklistReason').value = "";
+      
+      // 自动刷新列表
+      document.getElementById('blacklistViewBotSelect').value = bot_name;
+      loadBlacklist();
+    } else {
+      if(result.error === "未授权") {
+        showModal('授权已过期，请重新登录');
+        showLogin();
+      } else {
+        showModal("❌ 添加失败: " + result.error);
+      }
+    }
+  } catch(e) {
+    showModal("请求失败: " + e.message);
+  }
+};
+
+// ========== 黑名单管理功能结束 ==========
