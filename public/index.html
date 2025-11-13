@@ -40,6 +40,7 @@
           <li><a href="#botConfig" class="active"><i class="fas fa-cog"></i> Bot配置</a></li>
           <li><a href="#customerList"><i class="fas fa-users"></i> 客户ID列表</a></li>
           <li><a href="#blockedUsers"><i class="fas fa-user-slash"></i> 已停用用户</a></li>
+          <li><a href="#blacklist"><i class="fas fa-ban"></i> 黑名单管理</a></li>
           <li><a href="#sendMessage"><i class="fas fa-paper-plane"></i> 发送消息</a></li>
           <li><a href="#broadcast"><i class="fas fa-broadcast-tower"></i> 群发通知</a></li>
           <li><a href="#keywords"><i class="fas fa-reply-all"></i> 关键词回复</a></li>
@@ -111,6 +112,74 @@
           <div id="blockedUsersDiv" class="blocked-users-list"></div>
         </div>
       </section>
+
+      <!-- 黑名单管理 -->
+<section id="blacklist" class="card">
+  <div class="card-header">
+    <h2><i class="fas fa-ban"></i> 黑名单管理</h2>
+    <p class="hint-text">被拉黑的用户消息将不会转发给管理员，也不会收到任何回复</p>
+  </div>
+  <div class="card-body">
+    <!-- 手动添加黑名单 -->
+    <form id="addBlacklistForm" class="form-grid">
+      <div class="input-group">
+        <label for="blacklistBotSelect">选择Bot</label>
+        <select id="blacklistBotSelect" class="select-styled"></select>
+      </div>
+      <div class="input-group">
+        <label for="blacklistUserId">用户ID</label>
+        <input type="text" id="blacklistUserId" required placeholder="输入要拉黑的用户ID">
+      </div>
+      <div class="input-group wide">
+        <label for="blacklistReason">拉黑原因（可选）</label>
+        <input type="text" id="blacklistReason" placeholder="例如：发送广告、骚扰信息等">
+      </div>
+      <button type="submit" class="btn btn-danger">
+        <i class="fas fa-ban"></i> 添加到黑名单
+      </button>
+    </form>
+    
+    <!-- 黑名单列表 -->
+    <div class="action-bar" style="margin-top: 20px;">
+      <select id="blacklistViewBotSelect" class="select-styled"></select>
+      <button class="btn btn-secondary" onclick="loadBlacklist()">
+        <i class="fas fa-sync"></i> 刷新黑名单
+      </button>
+    </div>
+    <div id="blacklistDiv" class="blacklist-list"></div>
+    
+    <!-- 广告关键词配置 -->
+    <div class="card-subsection">
+      <h3><i class="fas fa-shield-alt"></i> 广告关键词过滤</h3>
+      <p class="hint-text">当用户消息包含以下关键词时，将自动拉黑（已在后端配置）</p>
+      <div class="keywords-display">
+        <span class="keyword-tag">代办</span>
+        <span class="keyword-tag">贷款</span>
+        <span class="keyword-tag">加微信</span>
+        <span class="keyword-tag">加VX</span>
+        <span class="keyword-tag">联系qq</span>
+        <span class="keyword-tag">私聊</span>
+        <span class="keyword-tag">赚钱</span>
+        <span class="keyword-tag">兼职</span>
+        <span class="keyword-tag">投资</span>
+        <span class="keyword-tag">理财</span>
+        <span class="keyword-tag">tg频道</span>
+        <span class="keyword-tag">推广</span>
+        <span class="keyword-tag">广告</span>
+        <span class="keyword-tag">合作</span>
+        <span class="keyword-tag">引流</span>
+        <span class="keyword-tag">刷单</span>
+        <span class="keyword-tag">代理</span>
+        <span class="keyword-tag">加群</span>
+        <span class="keyword-tag">进群</span>
+        <span class="keyword-tag">飞机群</span>
+      </div>
+      <p class="hint-text" style="margin-top: 10px;">
+        <i class="fas fa-info-circle"></i> 如需自定义关键词，请修改 workers.js 中的 spamKeywords 数组
+      </p>
+    </div>
+  </div>
+</section>
 
       <!-- 发送消息（单发） -->
       <section id="sendMessage" class="card">
@@ -471,4 +540,5 @@
 
   <script src="script.js"></script>
 </body>
+
 </html>
