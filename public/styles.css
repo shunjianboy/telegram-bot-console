@@ -708,5 +708,88 @@ code {
   .file-upload-group .file-controls {
     flex-direction: column;
   }
-
+/* 黑名单管理样式 */
+.blacklist-list {
+  margin-top: 20px;
 }
+
+.btn-danger {
+  background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
+  color: white;
+}
+
+.btn-danger:hover {
+  background: linear-gradient(135deg, #c0392b 0%, #a93226 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(231, 76, 60, 0.3);
+}
+
+.card-subsection {
+  margin-top: 30px;
+  padding: 20px;
+  background: #f8f9fa;
+  border-radius: 8px;
+  border-left: 4px solid #3498db;
+}
+
+.card-subsection h3 {
+  margin-top: 0;
+  color: #2c3e50;
+  font-size: 1.1em;
+}
+
+.keywords-display {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 15px;
+}
+
+.keyword-tag {
+  display: inline-block;
+  padding: 6px 12px;
+  background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
+  color: white;
+  border-radius: 20px;
+  font-size: 0.9em;
+  font-weight: 500;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.no-data {
+  text-align: center;
+  padding: 40px;
+  color: #7f8c8d;
+  font-size: 1.1em;
+}
+
+.no-data i {
+  font-size: 2em;
+  display: block;
+  margin-bottom: 10px;
+  color: #27ae60;
+}
+
+/* 优化客户列表的快速拉黑按钮 */
+.customer-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px;
+  background: white;
+  border-radius: 6px;
+  margin-bottom: 8px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+
+.customer-item code {
+  font-size: 1em;
+  padding: 4px 8px;
+}
+
+.btn-sm {
+  padding: 6px 12px;
+  font-size: 0.85em;
+}
+}
+
