@@ -1,5 +1,5 @@
 // 配置
-const workerApiBase = "https://telegram-bot-api.shunjianboy-e0e.workers.dev/api";
+const workerApiBase = "https://telegram-bot-api.a5fe.com/api";
 let api_pass = localStorage.getItem('adminApiPass') || "";
 let botsCache = {};
 
@@ -1234,3 +1234,4 @@ document.getElementById('addWhitelistForm').onsubmit = async (e) => {
 };
 
 // ========== 白名单管理功能结束 ==========
+
